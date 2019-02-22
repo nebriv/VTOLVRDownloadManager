@@ -151,6 +151,9 @@ class XenForo:
             title_block = resource_main.find("h3", {"class":"title"})
             title = title_block.find("a").text
             resource_link = title_block.find("a")['href']
+
+            resource_id = resource_link.split("/")[1]
+
             version = title_block.find("span", {"class":"version"}).text
             author = resource_main.find("a", {"class":"username"}).text
             tag_line = resource_main.find("div",{"class":"tagLine"}).text.replace("\t","").replace("\n","")
@@ -165,6 +168,7 @@ class XenForo:
             details = self._get_resource_details(self.url + resource_link)
 
             resource = {"resource_type": resource_type,
+                        "resource_id": resource_id,
                         "title": title,
                         "image_url": image_url,
                         "author": author,
@@ -201,6 +205,11 @@ class Syncer:
         exists_or_make(self.missions_directory)
         exists_or_make(self.maps_directory)
         exists_or_make(self.others_directory)
+
+
+        self.downloaded_maps = []
+        self.downloaded_campaigns = []
+        self.downloaded_missions = []
 
     def download_resource(self, resource):
         #print(resource['resource_type'])
@@ -239,13 +248,10 @@ class Syncer:
             logging.info("Downloading and unzipping %s" % download_file)
             Archive(download_file).extractall(zip_dir, auto_create_dir=True)
 
-            resource_metadata = {"resource_name": resource['title'],
-                                 "resource_type": resource['resource_type'],
-                                 "resource_source": resource['link'],
-                                 "version": resource['cur_version'],
-                                 "download_date": datetime.datetime.now(),
-                                 "download_source": resource['details']['download_link'],
-                                 }
+            resource_metadata = resource
+            resource_metadata['download_date'] = datetime.datetime.now()
+            resource_metadata['local_version'] = resource['cur_version']
+
 
             # Extracting the root folder (if someone uploads a nested file or something, we only want the one containing the correct data
             if resource['resource_type'] == "map":
@@ -256,11 +262,10 @@ class Syncer:
 
                     resource_name = root.split(os.sep)[-1]
                     move_path = os.path.join(self.vtolvr_dir, "CustomMaps", resource_name)
-                    if strtobool(input("Move %s to VTOL VR Directory (%s)? This will overwrite current data. (Y/N) " % (root, move_path))):
-                        copy(root, move_path)
-                        logging.info("Done moving %s... cleaning up temp" % root)
-                        shutil.rmtree(zip_dir)
-                        os.remove(download_file)
+                    copy(root, move_path)
+                    logging.info("Done moving %s... cleaning up temp" % root)
+                    shutil.rmtree(zip_dir)
+                    os.remove(download_file)
                 else:
                     logging.error("There is an error parsing the VTOL VR Map files. No map data found within download.")
             elif resource['resource_type'] == "campaign":
@@ -271,11 +276,10 @@ class Syncer:
 
                     resource_name = root.split(os.sep)[-1]
                     move_path = os.path.join(self.vtolvr_dir, "CustomScenarios", "Campaigns", resource_name)
-                    if strtobool(input("Move %s to VTOL VR Directory (%s)? This will overwrite current data. (Y/N) " % (root, move_path))):
-                        copy(root, move_path)
-                        logging.info("Done moving %s... cleaning up temp" % root)
-                        shutil.rmtree(zip_dir)
-                        os.remove(download_file)
+                    copy(root, move_path)
+                    logging.info("Done moving %s... cleaning up temp" % root)
+                    shutil.rmtree(zip_dir)
+                    os.remove(download_file)
 
                 else:
                     logging.error("There is an error parsing the VTOL VR Campaign files. No campaign data found within download.")
@@ -289,13 +293,27 @@ class Syncer:
                         metadata_file.write(json.dumps(resource_metadata, default=str))
                     resource_name = root.split(os.sep)[-1]
                     move_path = os.path.join(self.vtolvr_dir, "CustomScenarios", resource_name)
-                    if strtobool(input("Move %s to VTOL VR Directory (%s)? This will overwrite current data. (Y/N) " % (root, move_path))):
-                        copy(root, move_path)
-                        logging.info("Done moving %s... cleaning up temp" % root)
-                        shutil.rmtree(zip_dir)
-                        os.remove(download_file)
+                    copy(root, move_path)
+                    logging.info("Done moving %s... cleaning up temp" % root)
+                    shutil.rmtree(zip_dir)
+                    os.remove(download_file)
                 else:
                     logging.error("There is an error parsing the VTOL VR Mission files. No mission data found within download.")
+
+    def get_resource_by_id(self, id):
+        for campaign in self.campaigns:
+            if id == campaign['resource_id']:
+                return campaign
+
+        for map in self.maps:
+            if id == map['resource_id']:
+                return map
+
+        for mission in self.missions:
+            if id == mission['resource_id']:
+                return mission
+
+        return False
 
     def download_all_campaigns(self):
         for campaign in self.online_resources['campaigns']:
@@ -309,83 +327,97 @@ class Syncer:
         for map in self.online_resources['maps']:
             self.download_resource(map)
 
+    def get_local_all(self):
+        self.get_local_campaigns()
+        self.get_local_maps()
+        self.get_local_missions()
+
     def get_local_maps(self):
         logging.info("Looking for local VTOLVRMissions.com maps")
         maps = []
-        for folder in os.listdir(os.path.join(self.vtolvr_dir, "CustomMaps")):
-            map = folder
-            maps.append(map)
+        try:
+            for folder in os.listdir(os.path.join(self.vtolvr_dir, "CustomMaps")):
+                map = folder
+                maps.append(map)
 
-            self.downloaded_maps = []
-        no_metadata_maps = []
-        for map in maps:
-            if "CustomMaps" != map:
-                if os.path.isfile(os.path.join(self.vtolvr_dir, "CustomMaps", map, "vtolvrmissions.com_metadata.json")):
-                    with open(os.path.join(self.vtolvr_dir, "CustomMaps", map, "vtolvrmissions.com_metadata.json")) as json_file:
-                        metadata = json.load(json_file)
-                        self.downloaded_maps.append({"location":map, "metadata":metadata})
-                else:
-                    no_metadata_maps.append(map)
+                self.downloaded_maps = []
+            no_metadata_maps = []
+            for map in maps:
+                if "CustomMaps" != map:
+                    if os.path.isfile(os.path.join(self.vtolvr_dir, "CustomMaps", map, "vtolvrmissions.com_metadata.json")):
+                        with open(os.path.join(self.vtolvr_dir, "CustomMaps", map, "vtolvrmissions.com_metadata.json")) as json_file:
+                            metadata = json.load(json_file)
+                            self.downloaded_maps.append({"location":map, "metadata":metadata})
+                    else:
+                        no_metadata_maps.append(map)
 
-        for each in self.downloaded_maps:
-            logging.info("Found downloaded map (%s): %s (ver. %s) - downloaded on %s" % (each['location'], each['metadata']['resource_name'], each['metadata']['version'], each['metadata']['download_date']))
+            for each in self.downloaded_maps:
+                logging.info("Found downloaded map (%s): %s (ver. %s) - downloaded on %s" % (each['location'], each['metadata']['title'], each['metadata']['local_version'], each['metadata']['download_date']))
 
-        for each in no_metadata_maps:
-            logging.debug("Found unmanaged map: %s" % each)
+            for each in no_metadata_maps:
+                logging.debug("Found unmanaged map: %s" % each)
+        except FileNotFoundError as err:
+            logging.error("Unable to find CustomMaps folder - bad steam directory? %s" % err)
 
     def get_local_missions(self):
         logging.info("Looking for local VTOLVRMissions.com missions")
         missions = []
-        for folder in os.listdir(os.path.join(self.vtolvr_dir, "CustomScenarios")):
-            mission = folder
-            missions.append(mission)
+        try:
+            for folder in os.listdir(os.path.join(self.vtolvr_dir, "CustomScenarios")):
+                mission = folder
+                missions.append(mission)
 
-            self.downloaded_missions = []
-        no_metadata_missions = []
-        for mission in missions:
-            if "CustomScenarios" != mission and "Campaigns" != mission:
-                if os.path.isfile(os.path.join(self.vtolvr_dir, "CustomScenarios", mission, "vtolvrmissions.com_metadata.json")):
-                    with open(os.path.join(self.vtolvr_dir, "CustomScenarios", mission, "vtolvrmissions.com_metadata.json")) as json_file:
-                        metadata = json.load(json_file)
-                        self.downloaded_missions.append({"location":mission, "metadata":metadata})
-                else:
-                    no_metadata_missions.append(mission)
+                self.downloaded_missions = []
+            no_metadata_missions = []
+            for mission in missions:
+                if "CustomScenarios" != mission and "Campaigns" != mission:
+                    if os.path.isfile(os.path.join(self.vtolvr_dir, "CustomScenarios", mission, "vtolvrmissions.com_metadata.json")):
+                        with open(os.path.join(self.vtolvr_dir, "CustomScenarios", mission, "vtolvrmissions.com_metadata.json")) as json_file:
+                            metadata = json.load(json_file)
+                            self.downloaded_missions.append({"location":mission, "metadata":metadata})
+                    else:
+                        no_metadata_missions.append(mission)
 
-        for each in self.downloaded_missions:
-            logging.info("Found downloaded mission (%s): %s (ver. %s) - downloaded on %s" % (each['location'], each['metadata']['resource_name'], each['metadata']['version'], each['metadata']['download_date']))
+            for each in self.downloaded_missions:
+                logging.info("Found downloaded mission (%s): %s (ver. %s) - downloaded on %s" % (each['location'], each['metadata']['title'], each['metadata']['local_version'], each['metadata']['download_date']))
 
-        for each in no_metadata_missions:
-            logging.debug("Found unmanaged mission: %s" % each)
+            for each in no_metadata_missions:
+                logging.debug("Found unmanaged mission: %s" % each)
+        except FileNotFoundError as err:
+            logging.error("Unable to find CustomScenarios folder - bad steam directory? %s" % err)
 
     def get_local_campaigns(self):
         logging.info("Looking for local VTOLVRMissions.com Campaigns")
         campaigns = []
-        for folder in os.listdir(os.path.join(self.vtolvr_dir, "CustomScenarios", "Campaigns")):
-            campaign = folder
-            campaigns.append(campaign)
+        try:
+            for folder in os.listdir(os.path.join(self.vtolvr_dir, "CustomScenarios", "Campaigns")):
+                campaign = folder
+                campaigns.append(campaign)
 
-        self.downloaded_campaigns = []
-        no_metadata_campaigns = []
-        for campaign in campaigns:
-            if "Campaigns" != campaign:
-                if os.path.isfile(os.path.join(self.vtolvr_dir, "CustomScenarios", "Campaigns", campaign, "vtolvrmissions.com_metadata.json")):
-                    with open(os.path.join(self.vtolvr_dir, "CustomScenarios", "Campaigns", campaign, "vtolvrmissions.com_metadata.json")) as json_file:
-                        metadata = json.load(json_file)
-                        self.downloaded_campaigns.append({"location":campaign, "metadata":metadata})
-                else:
-                    no_metadata_campaigns.append(campaign)
+            self.downloaded_campaigns = []
+            no_metadata_campaigns = []
+            for campaign in campaigns:
+                if "Campaigns" != campaign:
+                    if os.path.isfile(os.path.join(self.vtolvr_dir, "CustomScenarios", "Campaigns", campaign, "vtolvrmissions.com_metadata.json")):
+                        with open(os.path.join(self.vtolvr_dir, "CustomScenarios", "Campaigns", campaign, "vtolvrmissions.com_metadata.json")) as json_file:
+                            metadata = json.load(json_file)
+                            self.downloaded_campaigns.append({"location":campaign, "metadata":metadata})
+                    else:
+                        no_metadata_campaigns.append(campaign)
 
-        for each in self.downloaded_campaigns:
-            logging.info("Found downloaded campaign (%s): %s (ver. %s) - downloaded on %s" % (each['location'], each['metadata']['resource_name'], each['metadata']['version'], each['metadata']['download_date']))
+            for each in self.downloaded_campaigns:
+                logging.info("Found downloaded campaign (%s): %s (ver. %s) - downloaded on %s" % (each['location'], each['metadata']['title'], each['metadata']['local_version'], each['metadata']['download_date']))
 
-        for each in no_metadata_campaigns:
-            logging.debug("Found unmanaged campaign: %s" % each)
+            for each in no_metadata_campaigns:
+                logging.debug("Found unmanaged campaign: %s" % each)
+        except FileNotFoundError as err:
+            logging.error("Unable to find CustomScenarios/Campaigns folder - bad steam directory? %s" % err)
 
     def check_for_updates(self):
         logging.info("Checking maps for updates...")
         for each in self.downloaded_maps:
             #print(each)
-            online = next(item for item in self.online_resources['maps'] if item["title"] == each['metadata']['resource_name'])
+            online = next(item for item in self.online_resources['maps'] if item["resource_id"] == each['metadata']['resource_id'])
             if online:
                 if LooseVersion(each['metadata']['version']) < LooseVersion(online['cur_version']):
                     if strtobool(input("%s is out of date (current ver: %s - latest ver: %s). Update now? (y/n)" % (each['metadata']['resource_name'], each['metadata']['version'], online['cur_version']))):
@@ -395,7 +427,7 @@ class Syncer:
 
         logging.info("Checking campaigns for updates...")
         for each in self.downloaded_campaigns:
-            online = next(item for item in self.online_resources['campaigns'] if item["title"] == each['metadata']['resource_name'])
+            online = next(item for item in self.online_resources['campaigns'] if item["resource_id"] == each['metadata']['resource_id'])
             if online:
                 if LooseVersion(each['metadata']['version']) < LooseVersion(online['cur_version']):
                     logging.info("%s is out of date (current ver: %s - latest ver: %s)" % (each['metadata']['resource_name'], each['metadata']['version'], online['cur_version']))
@@ -404,13 +436,74 @@ class Syncer:
 
         logging.info("Checking missions for updates...")
         for each in self.downloaded_missions:
-            online = next(item for item in self.online_resources['missions'] if item["title"] == each['metadata']['resource_name'])
+            online = next(item for item in self.online_resources['missions'] if item["resource_id"] == each['metadata']['resource_id'])
             if online:
                 if LooseVersion(each['metadata']['version']) < LooseVersion(online['cur_version']):
                     logging.info("%s is out of date (current ver: %s - latest ver: %s)" % (each['metadata']['resource_name'], each['metadata']['version'], online['cur_version']))
                 else:
                     logging.info("%s is up to date (current ver: %s - latest ver: %s)" % (each['metadata']['resource_name'], each['metadata']['version'], online['cur_version']))
 
+
+    def all_campaigns(self):
+        self.get_local_campaigns()
+        self.get_online_campaigns()
+        campaigns = []
+        for each in self.downloaded_campaigns:
+            campaign = each
+            campaign['downloaded'] = True
+            campaigns.append(campaign)
+
+        if len(self.online_resources['campaigns']) > 0:
+            for each in self.online_resources['campaigns']:
+                if not any(c['resource_id'] == each['resource_id'] for c in campaigns):
+                    campaign = each
+                    campaign['downloaded'] = False
+                    campaigns.append(campaign)
+
+        self.campaigns = campaigns
+
+        return(self.campaigns)
+
+
+    def all_missions(self):
+        self.get_local_missions()
+        self.get_online_missions()
+        missions = []
+        for each in self.downloaded_missions:
+            mission = each
+            mission['downloaded'] = True
+            missions.append(mission)
+
+        if len(self.online_resources['missions']) > 0:
+            for each in self.online_resources['missions']:
+                if not any(c['resource_id'] == each['resource_id'] for c in missions):
+                    mission = each
+                    mission['downloaded'] = False
+                    missions.append(mission)
+
+        self.missions = missions
+
+        return(self.missions)
+
+    def all_maps(self):
+        self.get_local_maps()
+        self.get_online_maps()
+        maps = []
+        for each in self.downloaded_maps:
+            map = each['metadata']
+            map['downloaded'] = True
+            maps.append(map)
+
+        if len(self.online_resources['maps']) > 0:
+            for each in self.online_resources['maps']:
+                if not any(c['resource_id'] == each['resource_id'] for c in maps):
+                    map = each
+                    map['downloaded'] = False
+                    maps.append(map)
+
+        self.maps = maps
+
+        return(self.maps)
 
     def get_online_all(self):
         self.get_online_campaigns()
@@ -458,18 +551,21 @@ class Syncer:
         self.print_online_maps()
         self.print_online_missions()
 
-steam_dir = auto_discover_vtol_dir()
-
-vtol_sync = Syncer(steam_dir, "https://www.vtolvrmissions.com/")
-
-vtol_sync.get_local_maps()
-vtol_sync.get_local_campaigns()
-vtol_sync.get_local_missions()
+# try:
+#     steam_dir = auto_discover_vtol_dir()
+# except ModuleNotFoundError as err:
+#     logging.error("%s" % err)
+#     steam_dir = "/Users/bvirgilio-domain/VTOLVRDownloadManager/steam_dir"
 #
-vtol_sync.get_online_all()
-
-vtol_sync.check_for_updates()
-exit()
+# vtol_sync = Syncer(steam_dir, "https://www.vtolvrmissions.com/")
+#
+#
+# vtol_sync.all_campaigns()
+#
+# #vtol_sync.check_for_updates()
+# #exit()
 # vtol_sync.print_online_all()
-vtol_sync.download_all_campaigns()
-vtol_sync.download_all_maps()
+#vtol_sync.download_all_campaigns()
+#vtol_sync.all_campaigns()
+
+# vtol_sync.download_all_maps()
