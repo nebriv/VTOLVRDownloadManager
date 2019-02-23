@@ -1,0 +1,12 @@
+beautifulsoup4==4.7.1
+certifi==2018.11.29
+chardet==3.0.4
+EasyProcess==0.2.5
+fleep==1.0.1
+idna==2.8
+patool==1.12
+pyunpack==0.1.2
+requests==2.21.0
+soupsieve==1.8
+urllib3==1.24.1
+vdf==2.5
