@@ -289,12 +289,6 @@ class Syncer:
             logging.info("Unzipping %s" % download_file)
             Archive(download_file).extractall(zip_dir, auto_create_dir=True)
             logging.info("Unzipped")
-            # if resource['resource_type'] == "map":
-            #     pass
-            # elif resource['resource_type'] == "mission":
-            #     pass
-            # elif resource['resource_type'] == "campaign":
-            #     pass
 
             resource_metadata = resource
             resource_metadata['download_date'] = datetime.datetime.now()
@@ -303,14 +297,17 @@ class Syncer:
             # Extracting the root folder (if someone uploads a nested file or something, we only want the one containing the correct data
             if resource['resource_type'] == "map":
                 root = find_vtol_map_root(zip_dir)
+                root_folder_name = root.split(os.sep)[-1]
                 if root:
                     vtol_id = self.parse_vtol_map_file(root)
                     if vtol_id:
                         if self.get_resource_by_vtol_id(vtol_id, resource_type=resource['resource_type']) and not update:
                             logging.error("Map with same ID already exists")
                             raise ValueError("Map with same ID already exists at %s" % self.get_resource_by_vtol_id(vtol_id, resource_type=resource['resource_type'])['local_location'])
-
-                    resource_name = "vtolvrmissions.com_" + root.split(os.sep)[-1]
+                        if root_folder_name != vtol_id:
+                            raise ValueError("Map Folder and VTOL MAP ID do not match. This is likely an error in how the author packaged the resource.")
+                        
+                    resource_name = root_folder_name
                     move_path = os.path.join(self.vtolvr_dir, "CustomMaps", resource_name)
                     resource_metadata['local_location'] = move_path
                     with open(os.path.join(root, "vtolvrmissions.com_metadata.json"), 'w') as metadata_file:
@@ -323,15 +320,17 @@ class Syncer:
                     logging.error("There is an error parsing the VTOL VR Map files. No map data found within download.")
             elif resource['resource_type'] == "campaign":
                 root = find_vtol_campaign_root(zip_dir)
+                root_folder_name = root.split(os.sep)[-1]
                 if root:
                     vtol_id = self.parse_vtol_campaign_file(root)
                     if vtol_id:
                         if self.get_resource_by_vtol_id(vtol_id, resource_type=resource['resource_type']) and not update:
                             logging.error("Campaign with same ID already exists")
                             raise ValueError("Campaign with same ID already exists at %s" % self.get_resource_by_vtol_id(vtol_id, resource_type=resource['resource_type'])['local_location'])
+                        if root_folder_name != vtol_id:
+                            raise ValueError("Campaign Folder and VTOL Campaign ID do not match. This is likely an error in how the author packaged the resource.")
 
-
-                    resource_name = "vtolvrmissions.com_" + root.split(os.sep)[-1]
+                    resource_name = root_folder_name
                     move_path = os.path.join(self.vtolvr_dir, "CustomScenarios", "Campaigns", resource_name)
                     resource_metadata['local_location'] = move_path
 
@@ -349,12 +348,16 @@ class Syncer:
                 root = find_vtol_mission_root(zip_dir)
                 if root:
                     vtol_id = self.parse_vtol_scenario_file(root)
+                    root_folder_name = root.split(os.sep)[-1]
                     if vtol_id:
                         if self.get_resource_by_vtol_id(vtol_id, resource_type=resource['resource_type']) and not update:
                             logging.error("Mission with same ID already exists")
                             raise ValueError("Mission with same ID already exists at %s" % self.get_resource_by_vtol_id(vtol_id, resource_type=resource['resource_type'])['local_location'])
-
-                    resource_name = "vtolvrmissions.com_" + root.split(os.sep)[-1]
+                        if root_folder_name != vtol_id:
+                            raise ValueError("Mission Folder and VTOL Mission ID do not match. This is likely an error in how the author packaged the resource.")
+                        
+                            
+                    resource_name = root_folder_name
                     move_path = os.path.join(self.vtolvr_dir, "CustomScenarios", resource_name)
                     resource_metadata['local_location'] = move_path
                     with open(os.path.join(root, "vtolvrmissions.com_metadata.json"), 'w') as metadata_file:
