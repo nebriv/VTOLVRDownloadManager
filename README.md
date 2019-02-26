@@ -13,19 +13,19 @@ It is recommended that you download the compiled Windows version located in the 
 If you're curious about how it works this is essentially a summary of the mess of spaghetti code.
 
 1. Client starts, and checks if it is able to read the Windows Registry
- - If it is able to read the Windows Registry, it gets the Steam Install location (HKCU\Software\Valve\Steam\SteamPath)
-   - In the install location steam has a VDF file containing all the Game Library locations.
-   - The script will then check each library location for the VTOL VR directory.
- - If it isn't able to read the windows registry a prompt is displayed to the user to manually provide the location to VTOL VR
+  - If it is able to read the Windows Registry, it gets the Steam Install location (HKCU\Software\Valve\Steam\SteamPath)
+    - In the install location steam has a VDF file containing all the Game Library locations.
+    - The script will then check each library location for the VTOL VR directory.
+  - If it isn't able to read the windows registry a prompt is displayed to the user to manually provide the location to VTOL VR
 2. The client then loads all the local resources (Campaigns, Maps, and Missions) from VTOL VR and checks if each folder has a "vtolvrmissions.com_metadata.json" file in it. If it does, it reads the file to extract the resource metadata.
 3. The client then reaches out to vtolvrmissions.com to read all the other resources available. The locations are hardcoded to only the following:
-  - Missions
-  - Campaigns
-  - Maps
-  - If other categories (major or minor) exist, the script will not even see them.
+   - Missions
+   - Campaigns
+   - Maps
+   - If other categories (major or minor) exist, the script will not even see them.
 4. A comparison is done to determine if the local version of the metadata is the most recent. If it is not, the metadata is updated locally.
 5. Downloaded resources are saved to a temp file within the running directory. The resource is extracted, parsed for some sanity and then moved to the proper location.
- - A vtolvrmissions.com_metadata.json file is created within the same directory of the resource containing the stored metadata information.
+  - A vtolvrmissions.com_metadata.json file is created within the same directory of the resource containing the stored metadata information.
 
 
 ## Development/Running from Source
