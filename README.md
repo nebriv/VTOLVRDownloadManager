@@ -6,7 +6,7 @@ Sidenote: This is the first GUI I've written in Python so it's probably not done
 ## Running It
 It is recommended that you download the compiled Windows version located in the releases section. Of course you are more than welcome to download the Python source code, review it and/or manually run it if you are familiar with the language.
 
-## Potential Problems
+### Potential Problems
  - Unmanaged resources can be seen by going to settings and checking "Show unmanaged resources". The tables will refresh and show you all the resources in which the metadata file doesn't exist OR could not be parsed.
 
 ### How it Works
