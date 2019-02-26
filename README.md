@@ -25,7 +25,7 @@ If you're curious about how it works this is essentially a summary of the mess o
    - If other categories (major or minor) exist, the script will not even see them.
 4. A comparison is done to determine if the local version of the metadata is the most recent. If it is not, the metadata is updated locally.
 5. Downloaded resources are saved to a temp file within the running directory. The resource is extracted, parsed for some sanity and then moved to the proper location.
-  - A vtolvrmissions.com_metadata.json file is created within the same directory of the resource containing the stored metadata information.
+   - A vtolvrmissions.com_metadata.json file is created within the same directory of the resource containing the stored metadata information.
 
 
 ## Development/Running from Source
