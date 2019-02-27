@@ -1,5 +1,5 @@
 *.idea
-
+learning.py
 steamdir/
 temp/
 venv/
@@ -108,3 +108,4 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+learning.py
