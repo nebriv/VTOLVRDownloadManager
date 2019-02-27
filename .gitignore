@@ -3,6 +3,7 @@ learning.py
 steamdir/
 temp/
 venv/
+vtolvrmissions_temp/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
