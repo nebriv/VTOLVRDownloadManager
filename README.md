@@ -27,7 +27,10 @@ If you're curious about how it works this is essentially a summary of the mess o
 5. Downloaded resources are saved to a temp file within the running directory. The resource is extracted, parsed for some sanity and then moved to the proper location.
    - A vtolvrmissions.com_metadata.json file is created within the same directory of the resource containing the stored metadata information.
 
-
 ## Development/Running from Source
 The app is written in Python 3.5 and should work with most major versions, however it has not been tested. It is recommended to create a Virtual Environment and installing the requirements.txt that way. It should... just work.
+
+## TODO
+  - Implement better logging/display logs to the user
+  - Clean up the thread mess (implement pyqt instead of tkinter?)
 
