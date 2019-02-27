@@ -1,7 +1,7 @@
 # VTOLVRMissions.com Downloader
 This is a Windows client intended to simplify the process of finding, downloading, and installing various custom resources (e.g. Campaigns, Maps, and Missions) into VTOL VR.
 
-![image](https://user-images.githubusercontent.com/1825214/53458571-b4da5b00-3a04-11e9-8893-44e7c2b599be.png)
+![image](https://user-images.githubusercontent.com/1825214/53459197-ea804380-3a06-11e9-970c-15dcea4dad4a.png)
 
 Sidenote: This is the first GUI I've written in Python so it's probably not done "the right way", but it is "mostly" functional and should meet most requirements. Feel free to report any issues in the issues section of github, or find me on the VTOL VR discord.
 
