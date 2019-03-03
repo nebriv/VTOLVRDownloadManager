@@ -24,21 +24,22 @@ import tempfile, zlib
 import check_updates
 from urllib.request import urlopen
 import tkinter as tk
-from icon_base64 import ICON
+import icon_base64
+
 
 _, ICON_PATH = tempfile.mkstemp()
 with open(ICON_PATH, 'wb') as icon_file:
-    icon_file.write(ICON)
+    icon_file.write(icon_base64.ICON)
 
 __version__ = "v1.1"
 __author__ = "nebriv"
 githuburl = "https://github.com/nebriv/VTOLVRDownloadManager"
 
-datafile = "icon.ico"
-if not hasattr(sys, "frozen"):
-    datafile = os.path.join(os.path.dirname(__file__), datafile)
-else:
-    datafile = os.path.join(sys.prefix, datafile)
+# datafile = "icon.ico"
+# if not hasattr(sys, "frozen"):
+#     datafile = os.path.join(os.path.dirname(__file__), datafile)
+# else:
+#     datafile = os.path.join(sys.prefix, datafile)
 
 def treeview_sort_column(tv, col, reverse):
 
@@ -80,6 +81,8 @@ class Window(Frame):
         self.run_connectivity_checks.set(True)
         self.running_threads = []
 
+        self.steam_dir = StringVar()
+
         self.loading_label_text = StringVar()
         self.vtol_online_text = StringVar()
 
@@ -95,7 +98,7 @@ class Window(Frame):
 
         try:
             self.master.iconbitmap(default=ICON_PATH)
-            self.master.tk.call('wm', 'iconphoto', self.master._w, tk.PhotoImage(file=ICON_PATH))
+            #self.master.tk.call('wm', 'iconphoto', self.master._w, tk.PhotoImage(file=ICON_PATH))
         except Exception as err_msg:
             logging.error("Logo icon doesn't exist: %s" % err_msg)
         self.loading_label_text.set("Loading...")
@@ -205,6 +208,7 @@ class Window(Frame):
         settings_page.grid_columnconfigure(2, weight=1)
         Checkbutton(settings_page, text="Show Unmanaged Resources", variable=self.show_unmanaged, command=self.refresh_all).grid(row=0, sticky=W, padx=5)
         Checkbutton(settings_page, text="Perform Connectivity Checks when offline", variable=self.run_connectivity_checks).grid(row=1, sticky=W, padx=5)
+        #Entry(settings_page, textvariable=self.steam_dir).grid(row=2, sticky=W, padx=5)
 
         # Campaign Page
         campaign_page.grid_rowconfigure(10)
@@ -311,6 +315,10 @@ class Window(Frame):
         self.mission_image.grid(column=1, row=2, padx=10, pady=10)
         self.mission_details_tagline = Label(self.mission_details, wraplength=300, text="", justify=CENTER)
         self.mission_details_tagline.grid(row=3, column=1)
+
+        self.mission_details_last_updated = Label(self.mission_details, wraplength=300, text="", justify=LEFT)
+        self.mission_details_last_updated.grid(row=4, column=1, pady=10)
+
         self.mission_details_description = Label(self.mission_details, wraplength=300, text="", justify=LEFT)
         self.mission_details_description.grid(row=4, column=1, pady=10)
 
@@ -393,6 +401,10 @@ class Window(Frame):
         self.map_image.grid(column=1, row=2, padx=10, pady=10)
         self.map_details_tagline = Label(self.map_details, wraplength=300, text="", justify=CENTER)
         self.map_details_tagline.grid(row=3, column=1)
+
+        self.map_details_last_updated = Label(self.map_details, wraplength=300, text="", justify=LEFT)
+        self.map_details_last_updated.grid(row=4, column=1, pady=10)
+
         self.map_details_description = Label(self.map_details, wraplength=300, text="", justify=LEFT)
         self.map_details_description.grid(row=4, column=1, pady=10)
 
@@ -500,6 +512,7 @@ class Window(Frame):
             self.mission_image.photo = image
 
             self.mission_details_tagline.configure(text=resource['tag_line'])
+            self.mission_details_last_updated.config(text="Online Version Updated: %s" % resource['last_updated'])
         except IndexError as err:
             pass
 
@@ -522,6 +535,7 @@ class Window(Frame):
             self.map_image.photo = image
 
             self.map_details_tagline.configure(text=resource['tag_line'])
+            self.map_details_last_updated.config(text="Online Version Updated: %s" % resource['last_updated'])
             #self.campaign_details_description.configure(text=resource['details']['description'])
         except IndexError as err:
             pass
@@ -544,12 +558,13 @@ class Window(Frame):
     def load_vtol_sync_app(self):
         """ Loads the actual downloader component """
         try:
-            self.steam_dir = auto_discover_vtol_dir()
+            steam_dir = auto_discover_vtol_dir()
         except Exception as err:
             logging.error("%s" % err)
-            self.steam_dir = self.steam_directory_prompt()
+            steam_dir = self.steam_directory_prompt()
 
-        self.vtol_sync = Syncer(self.steam_dir, "https://www.vtolvrmissions.com/")
+
+        self.vtol_sync = Syncer(steam_dir, "https://www.vtolvrmissions.com/")
 
     def put_msg(self, msg):
         self.status_queue.put(msg)
