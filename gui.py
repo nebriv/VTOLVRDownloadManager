@@ -1,13 +1,7 @@
 from tkinter import *
-from tkinter import *
-from tkinter import ttk
 import os
-from tkinter import scrolledtext
-import random
-from tkinter import Tk, RIGHT, BOTH, RAISED
 from tkinter.ttk import Frame, Button, Style
 from tkinter import simpledialog
-from tkinter.scrolledtext import ScrolledText
 from tkinter import ttk
 from downloader import Syncer, auto_discover_vtol_dir
 from tkinter import messagebox
@@ -40,8 +34,7 @@ __version__ = "v1.1"
 __author__ = "nebriv"
 githuburl = "https://github.com/nebriv/VTOLVRDownloadManager"
 
-
-datafile = "logo.ico"
+datafile = "icon.ico"
 if not hasattr(sys, "frozen"):
     datafile = os.path.join(os.path.dirname(__file__), datafile)
 else:

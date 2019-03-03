@@ -22,9 +22,6 @@ logger = logging.getLogger(__name__)
 # noinspection SpellCheckingInspection,SpellCheckingInspection
 logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
 
-__version__ = "v1.1"
-__author__ = "nebriv"
-
 try:
     import winreg
 

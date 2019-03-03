@@ -2,8 +2,7 @@ import requests
 from distutils.version import LooseVersion, StrictVersion
 import logging
 
-__version__ = "v1.0"
-__author__ = "nebriv"
+
 update_url = "https://api.github.com/repos/nebriv/VTOLVRDownloadManager/releases/latest"
 def check_updates(cur_version, url=update_url):
     logging.info("Checking for updates...")
