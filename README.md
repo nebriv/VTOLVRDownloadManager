@@ -6,7 +6,10 @@ This is a Windows client intended to simplify the process of finding, downloadin
 Sidenote: This is the first GUI I've written in Python so it's probably not done "the right way", but it is "mostly" functional and should meet most requirements. Feel free to report any issues in the issues section of github, or find me on the VTOL VR discord.
 
 ## Running It
-It is recommended that you download the compiled Windows version located in the releases section. Of course you are more than welcome to download the Python source code, review it and/or manually run it if you are familiar with the language.
+It is recommended that you download the compiled Windows version located in the releases section:
+[Latest Release](https://github.com/nebriv/VTOLVRDownloadManager/releases/latest)
+
+Of course you are more than welcome to download the Python source code, review it and/or manually run it if you are familiar with the language.
 
 ### Downloading a Resource
 1. Click the resource you want to download, ensure it is highlighted in blue.
@@ -23,7 +26,17 @@ To get all available updates, click the "Update All" button in the menu bar. The
 
 ### Potential Problems
  - Unmanaged resources can be seen by going to settings and checking "Show unmanaged resources". The tables will refresh and show you all the resources in which the metadata file doesn't exist OR could not be parsed (I.E. In most cases - files that the downloader didn't download).
- - Mission and Map Developers! BACK UP YOUR FILES. Currently VTOL VR does not support directories with the same name in the custom maps and scenarios folders. You will not be able to download your own resources using this tool (probably isn't a big deal). You can see unmanaged resources (this includes your custom maps and missions) by following the instructions above.
+
+## Resource Developers
+BACK UP YOUR FILES. Currently VTOL VR does not support directories with the same name in the custom maps and scenarios folders. You will not be able to download your own resources using this tool (probably isn't a big deal). You can see unmanaged resources (this includes your custom maps and missions) by following the instructions above.
+
+### Expected Folder Structure
+The script recursively walks the downloaded zip file and looks for the VTOL VR Resoure File (file extension .vts/.vtc/.vtm). Once the file is found, the folder containing it is copied to the applicable VTOL VR game directory depending on the resource type. The script will not currently handle resources other than the expected one for the downloadable resource. In other words, if you have a Zip folder containing both the CustomScenarios and CustomMaps folder the script will throw an exception and fail to download your work.
+
+ - ZIP/RAR/Compressed Folder
+   - Any number of sub-folders (Other files can exist here, such as ReadMes/etc)
+     - VTOL VR Resource Folder (This is the folder that gets copied to the VTOL VR directory and must match the resource ID in the .VTS/.VTC/.VTM file)
+       - A single .VTS/.VTC/.VTM file
  
 ## How it Works
 If you're curious about how it works this is essentially a summary of the mess of spaghetti code.
