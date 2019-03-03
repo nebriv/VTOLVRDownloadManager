@@ -31,7 +31,7 @@ _, ICON_PATH = tempfile.mkstemp()
 with open(ICON_PATH, 'wb') as icon_file:
     icon_file.write(icon_base64.ICON)
 
-__version__ = "v1.1"
+__version__ = "v1.1.1"
 __author__ = "nebriv"
 githuburl = "https://github.com/nebriv/VTOLVRDownloadManager"
 

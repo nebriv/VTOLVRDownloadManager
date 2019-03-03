@@ -1,20 +1,8 @@
 import requests
 from bs4 import BeautifulSoup
 import logging
-import os
-import re
-from pyunpack import Archive
-import datetime
-import json
-from distutils.util import strtobool
-import shutil
-import vdf
-# noinspection PyUnresolvedReferences
-from distutils.version import LooseVersion, StrictVersion
-import check_updates
 from dateutil import parser as date_parser
 
-import tempfile
 
 class XenForo:
     def __init__(self, url):
