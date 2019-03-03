@@ -11,6 +11,8 @@ import shutil
 import vdf
 # noinspection PyUnresolvedReferences
 from distutils.version import LooseVersion, StrictVersion
+import check_updates
+from dateutil import parser as date_parser
 
 import tempfile
 
@@ -20,7 +22,7 @@ logger = logging.getLogger(__name__)
 # noinspection SpellCheckingInspection,SpellCheckingInspection
 logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
 
-__version__ = 1.0
+__version__ = "v1.1"
 __author__ = "nebriv"
 
 try:
@@ -46,32 +48,64 @@ def exists_or_make(directory):
     if not os.path.exists(directory):
         os.makedirs(directory)
 
-
 def find_vtol_map_root(directory):
+    locations = []
     map_extensions = ['.vtm']
+    bad_extensions = ['.vts', '.vtc']
     for each_dir in os.walk(directory):
         for file in each_dir[2]:
             if any(extension in file for extension in map_extensions):
-                return each_dir[0]
-    return False
+                locations.append(each_dir[0])
+            if any(extension in file for extension in bad_extensions):
+                logging.error("Unexpected extension while looking for map resources: %s" % file)
+                raise FileExistsError("Unexpected extension while looking for map resources: %s" % file)
+    if len(locations) > 1:
+        logging.error("More than one (%s) map resource found in download. \n This is currently unsupported by this client." % len(locations))
+        raise FileExistsError("More than one (%s) map resource found in download. \n This is currently unsupported by this client." % len(locations))
+    elif len(locations) == 1:
+        return locations[0]
+    else:
+        return False
 
 
 def find_vtol_campaign_root(directory):
+    locations = []
     campaign_extensions = ['.vtc']
+    bad_extensions = ['.vts', '.vtm']
     for each_dir in os.walk(directory):
         for file in each_dir[2]:
             if any(extension in file for extension in campaign_extensions):
-                return each_dir[0]
-    return False
-
+                locations.append(each_dir[0])
+            if any(extension in file for extension in bad_extensions):
+                logging.error("Unexpected extension while looking for campaign resources: %s" % file)
+                raise FileExistsError("Unexpected extension while looking for campaign resources: %s" % file)
+    if len(locations) > 1:
+        logging.error("More than one (%s) campaign resource found in download. \n This is currently unsupported by this client." % len(locations))
+        raise FileExistsError("More than one (%s) campaign resource found in download. \n This is currently unsupported by this client." % len(locations))
+    elif len(locations) == 1:
+        return locations[0]
+    else:
+        return False
 
 def find_vtol_mission_root(directory):
+    locations = []
     mission_extensions = ['.vts']
+    bad_extensions = ['.vtc', '.vtm']
     for each_dir in os.walk(directory):
         for file in each_dir[2]:
             if any(extension in file for extension in mission_extensions):
                 return each_dir[0]
-    return False
+            if any(extension in file for extension in bad_extensions):
+                logging.error("Unexpected extension while looking for mission resources: %s" % file)
+                raise FileExistsError("Unexpected extension while looking for mission resources: %s" % file)
+    if len(locations) > 1:
+        logging.error("More than one (%s) campaign resource found in download. \n This is currently unsupported by this client." % len(locations))
+        raise FileExistsError("More than one (%s) campaign resource found in download. \n This is currently unsupported by this client." % len(locations))
+    elif len(locations) == 1:
+        return locations[0]
+    else:
+        return False
+
 
 
 def auto_discover_vtol_dir():
@@ -174,11 +208,10 @@ class XenForo:
             author = resource_main.find("a", {"class": "username"}).text
             tag_line = resource_main.find("div", {"class": "tagLine"}).text.replace("\t", "").replace("\n", "")
 
-            image_url = resource_image.find("a", {"class": "resourceIcon"})['href']
-
+            image_url = resource_image.find("img")['src']
             rating = resource_stats.find("span", {"class": "ratings"})['title']
             downloads = resource_stats.find("dl", {"class": "resourceDownloads"}).text.split("Downloads: ")[1]
-            last_updated = resource_stats.find("dl", {"class": "resourceUpdated"}).text.split("Updated: ")[1]
+            last_updated = date_parser.parse(resource_stats.find("dl", {"class": "resourceUpdated"}).text.split("Updated: ")[1]).strftime("%Y-%m-%d")
 
             logging.debug("Getting resource details page: %s" % resource_link)
             if get_details:
@@ -189,7 +222,7 @@ class XenForo:
             resource = {"resource_type": resource_type,
                         "resource_id": resource_id,
                         "title": title,
-                        "image_url": image_url,
+                        "image_url": self.url + "%s" % image_url,
                         "author": author,
                         "tag_line": tag_line,
                         "cur_version": version,

@@ -16,6 +16,9 @@ import queue
 import webbrowser
 import threading
 import logging
+import PIL.ImageTk, PIL.Image
+import urllib, io
+
 try:
     from Tkinter import *
     from ttk import *
@@ -23,16 +26,17 @@ except ImportError:  # Python 3
     from tkinter import *
     from tkinter.ttk import *
 
-import tempfile, base64, zlib
-
-ICON = zlib.decompress(base64.b64decode('eJxjYGAEQgEBBiDJwZDBy'
-    'sAgxsDAoAHEQCEGBQaIOAg4sDIgACMUj4JRMApGwQgF/ykEAFXxQRc='))
+import tempfile, zlib
+import check_updates
+from urllib.request import urlopen
+import tkinter as tk
+from icon_base64 import ICON
 
 _, ICON_PATH = tempfile.mkstemp()
 with open(ICON_PATH, 'wb') as icon_file:
     icon_file.write(ICON)
 
-__version__ = 1.0
+__version__ = "v1.1"
 __author__ = "nebriv"
 githuburl = "https://github.com/nebriv/VTOLVRDownloadManager"
 
@@ -42,6 +46,34 @@ if not hasattr(sys, "frozen"):
     datafile = os.path.join(os.path.dirname(__file__), datafile)
 else:
     datafile = os.path.join(sys.prefix, datafile)
+
+def treeview_sort_column(tv, col, reverse):
+
+    l = [(tv.set(k, col), k) for k in tv.get_children('')]
+
+    # Hardcoding the columns for now... too lazy to detect types
+    if col == "Name":
+        l.sort(key=lambda t: int(t[0]), reverse=reverse)
+    elif col == "Downloads":
+        l.sort(key=lambda t: float(t[0]), reverse=reverse)
+    else:
+        l.sort(key=lambda t: t[0], reverse=reverse)
+
+    for index, (val, k) in enumerate(l):
+        tv.move(k, '', index)
+
+    tv.heading(col,
+               command=lambda: treeview_sort_column(tv, col, not reverse))
+
+def treeview_search(treeview, comparevalue):
+    children = treeview.get_children('')
+    for child in children:
+        values = treeview.item(child, 'values')
+        print(comparevalue[0], values[0])
+        if comparevalue[0]==values[0] and str(comparevalue[1])==str(values[1]):
+
+            return True
+    return False
 
 class Window(Frame):
 
@@ -61,11 +93,16 @@ class Window(Frame):
         self.about_window_opened = False
         self.recheck_running = False
 
+        self.refresh_campaigns_running = False
+        self.refresh_maps_running = False
+        self.refresh_missions_running = False
+
         self.master = master
         self.master.wm_title("VTOLVRMissions.com Downloader")
 
         try:
             self.master.iconbitmap(default=ICON_PATH)
+            self.master.tk.call('wm', 'iconphoto', self.master._w, tk.PhotoImage(file=ICON_PATH))
         except Exception as err_msg:
             logging.error("Logo icon doesn't exist: %s" % err_msg)
         self.loading_label_text.set("Loading...")
@@ -74,6 +111,14 @@ class Window(Frame):
 
         self.status_queue = queue.Queue()
         self.status_message_updater()
+        #update_thread = threading.Thread(target=)
+        self.master.after(10000, self.check_for_updates)
+
+    def check_for_updates(self):
+        update_available = check_updates.check_updates(__version__)
+        if update_available:
+            if messagebox.askyesno("VTOLVRMission Downloader Client Update Available","You are currently on version %s, %s is available for download.\nWould you like to visit the download page now?" % (__version__, update_available['version'])):
+                self.open_in_browser(update_available['browse_url'])
 
     def close_about_window(self):
         self.about_window_opened = False
@@ -167,9 +212,10 @@ class Window(Frame):
         settings_page.grid_columnconfigure(2, weight=1)
         Checkbutton(settings_page, text="Show Unmanaged Resources", variable=self.show_unmanaged, command=self.refresh_all).grid(row=0, sticky=W, padx=5)
         Checkbutton(settings_page, text="Perform Connectivity Checks when offline", variable=self.run_connectivity_checks).grid(row=1, sticky=W, padx=5)
+
         # Campaign Page
         campaign_page.grid_rowconfigure(10)
-        campaign_page.grid_columnconfigure(3, weight=1)
+        campaign_page.grid_columnconfigure(4, weight=1)
 
         campaign_content = Frame(campaign_page)
         campaign_content.grid(row=1, column=3, sticky="NS", pady=5)
@@ -177,32 +223,59 @@ class Window(Frame):
         campaign_content.grid_columnconfigure(2)
         campaign_vsb = Scrollbar(campaign_content, orient = "vertical")
         self.campaign_tree = Treeview(campaign_content, yscrollcommand = campaign_vsb.set)
+        self.campaign_tree.bind("<ButtonRelease-1>", lambda event, campaign_tree=self.campaign_tree:  self.set_campaign_details(campaign_tree) )
         campaign_vsb.configure(command=self.campaign_tree.yview)
 
-        self.campaign_tree['columns'] = ("Name", "Tag Line", "Category", "Author", "Online_Version", "Local_Version", "resource_id")
-        self.campaign_tree['displaycolumns'] = ("Name", "Tag Line", "Category", "Author", "Online_Version", "Local_Version")
+        self.campaign_details = Frame(campaign_page)
+        self.campaign_details.grid(row=1, column=4, sticky="NS", padx=5, pady=5)
+        self.campaign_details.grid_rowconfigure(5)
+        self.campaign_details.grid_columnconfigure(1)
+
+        self.campaign_details_title = Label(self.campaign_details, text="")
+        self.campaign_details_title.grid(row=1, column=1)
+        self.campaign_image = Label(self.campaign_details, image=None, width=50)
+        self.campaign_image.grid(column=1, row=2, padx=10, pady=10)
+        self.campaign_details_tagline = Label(self.campaign_details, wraplength=300, text="", justify=CENTER)
+        self.campaign_details_tagline.grid(row=3, column=1)
+
+        self.campaign_details_last_updated = Label(self.campaign_details, wraplength=300, text="", justify=LEFT)
+        self.campaign_details_last_updated.grid(row=4, column=1, pady=10)
+
+        self.campaign_details_description = Label(self.campaign_details, wraplength=300, text="", justify=LEFT)
+        self.campaign_details_description.grid(row=5, column=1, pady=10)
+
+
+        self.campaign_tree['columns'] = ("Name", "Downloads", "Rating", "Category", "Author", "Online_Version", "Local_Version", "resource_id")
+        self.campaign_tree['displaycolumns'] = ("Name","Downloads", "Rating", "Category", "Author", "Online_Version", "Local_Version")
         self.campaign_tree.heading("#0", text="Name")
-        self.campaign_tree.column("#0", minwidth=200, width=225)
+        self.campaign_tree.column("#0", minwidth=200, width=250, anchor="center")
 
-        self.campaign_tree.heading("#1", text="Tag Line")
-        self.campaign_tree.column("#1", minwidth=250, width=400)
+        self.campaign_tree.heading("#1", text="Downloads")
+        self.campaign_tree.column("#1", minwidth=75, width=100, anchor="center")
 
-        self.campaign_tree.heading("#2", text="Category")
-        self.campaign_tree.column("#2", minwidth=75, width=100)
+        self.campaign_tree.heading("#2", text="Rating")
+        self.campaign_tree.column("#2", minwidth=50, width=50, anchor="center")
 
-        self.campaign_tree.heading("#3", text="Author")
-        self.campaign_tree.column("#3", minwidth=50, width=75)
+        self.campaign_tree.heading("#3", text="Category")
+        self.campaign_tree.column("#3", minwidth=75, width=100, anchor="center")
 
-        self.campaign_tree.heading("#4", text="Online Version")
-        self.campaign_tree.column("#4", minwidth=50, width=100)
+        self.campaign_tree.heading("#4", text="Author")
+        self.campaign_tree.column("#4", minwidth=50, width=75, anchor="center")
 
-        self.campaign_tree.heading("#5", text="Local Version")
-        self.campaign_tree.column("#5", minwidth=50, width=150)
+        self.campaign_tree.heading("#5", text="Online Version")
+        self.campaign_tree.column("#5", minwidth=50, width=100, anchor="center")
 
-        self.campaign_tree.heading("#6", text="")
-        self.campaign_tree.column("#6", minwidth=0, width=0)
+        self.campaign_tree.heading("#6", text="Local Version")
+        self.campaign_tree.column("#6", minwidth=50, width=150, anchor="center")
 
-        self.campaign_tree.grid(row=1, column=3, sticky="NS")
+        self.campaign_tree.heading("#7", text="")
+        self.campaign_tree.column("#7", minwidth=0, width=0)
+
+        for col in self.campaign_tree['columns']:
+            self.campaign_tree.heading(col, command=lambda _col=col: \
+                treeview_sort_column(self.campaign_tree, _col, False))
+
+        self.campaign_tree.grid(row=1, column=3, sticky="W")
         campaign_vsb.grid(row=1, column=4, sticky='ns')
 
         campaign_buttons = Frame(campaign_content)
@@ -212,19 +285,16 @@ class Window(Frame):
 
         campaign_download_button = Button(campaign_buttons, text="Open in Web Browser", command= lambda: self.open_resource_in_browser(self.campaign_tree) )
         campaign_download_button.grid(row=1, column=1)
-
         campaign_open_location_button = Button(campaign_buttons, text="Open Local Location", command= lambda: self.open_resource_location(self.campaign_tree, "campaign") )
         campaign_open_location_button.grid(row=1, column=2)
-
         campaign_download_button = Button(campaign_buttons, text="Install/Update", command= lambda: self.download_button(self.campaign_tree) )
         campaign_download_button.grid(row=1, column=3)
-
         campaign_remove_button = Button(campaign_buttons, text="Remove", command= lambda: self.remove_button(self.campaign_tree) )
         campaign_remove_button.grid(row=1, column=4)
 
         # Mission Page
         mission_page.grid_rowconfigure(10)
-        mission_page.grid_columnconfigure(3, weight=1)
+        mission_page.grid_columnconfigure(4, weight=1)
 
         mission_content = Frame(mission_page)
         mission_content.grid(row=1, column=3, sticky="NS", pady=5)
@@ -232,27 +302,56 @@ class Window(Frame):
         mission_content.grid_columnconfigure(2)
         mission_vsb = Scrollbar(mission_content, orient = "vertical")
         self.mission_tree = Treeview(mission_content, yscrollcommand = mission_vsb.set)
+        self.mission_tree.bind("<ButtonRelease-1>",
+                                lambda event, mission_tree=self.mission_tree: self.set_mission_details(
+                                    mission_tree))
         mission_vsb.configure(command=self.mission_tree.yview)
 
-        self.mission_tree['columns'] = ("Name", "Tag Line", "Author", "Online_Version", "Local_Version", "resource_id")
-        self.mission_tree['displaycolumns'] = ("Name", "Tag Line", "Author", "Online_Version", "Local_Version")
+        self.mission_details = Frame(mission_page)
+        self.mission_details.grid(row=1, column=4, sticky="NS", padx=5, pady=5)
+        self.mission_details.grid_rowconfigure(5)
+        self.mission_details.grid_columnconfigure(1)
+
+        self.mission_details_title = Label(self.mission_details, text="")
+        self.mission_details_title.grid(row=1, column=1)
+        self.mission_image = Label(self.mission_details, image=None, width=50)
+        self.mission_image.grid(column=1, row=2, padx=10, pady=10)
+        self.mission_details_tagline = Label(self.mission_details, wraplength=300, text="", justify=CENTER)
+        self.mission_details_tagline.grid(row=3, column=1)
+        self.mission_details_description = Label(self.mission_details, wraplength=300, text="", justify=LEFT)
+        self.mission_details_description.grid(row=4, column=1, pady=10)
+
+
+        self.mission_tree['columns'] = ("Name", "Downloads", "Rating", "Category", "Author", "Online_Version", "Local_Version", "resource_id")
+        self.mission_tree['displaycolumns'] = ("Name","Downloads", "Rating", "Category", "Author", "Online_Version", "Local_Version")
         self.mission_tree.heading("#0", text="Name")
-        self.mission_tree.column("#0", minwidth=200, width=200)
+        self.mission_tree.column("#0", minwidth=200, width=250, anchor="center")
 
-        self.mission_tree.heading("#1", text="Tag Line")
-        self.mission_tree.column("#1", minwidth=250, width=550)
+        self.mission_tree.heading("#1", text="Downloads")
+        self.mission_tree.column("#1", minwidth=75, width=100, anchor="center")
 
-        self.mission_tree.heading("#2", text="Author")
-        self.mission_tree.column("#2", minwidth=100, width=100)
+        self.mission_tree.heading("#2", text="Rating")
+        self.mission_tree.column("#2", minwidth=50, width=50, anchor="center")
 
-        self.mission_tree.heading("#3", text="Online Version")
-        self.mission_tree.column("#3", minwidth=100, width=100)
+        self.mission_tree.heading("#3", text="Category")
+        self.mission_tree.column("#3", minwidth=75, width=100, anchor="center")
 
-        self.mission_tree.heading("#4", text="Local Version")
-        self.mission_tree.column("#4", minwidth=150, width=150)
+        self.mission_tree.heading("#4", text="Author")
+        self.mission_tree.column("#4", minwidth=50, width=75, anchor="center")
 
-        self.mission_tree.heading("#5", text="")
-        self.mission_tree.column("#5", minwidth=0, width=0)
+        self.mission_tree.heading("#5", text="Online Version")
+        self.mission_tree.column("#5", minwidth=50, width=100, anchor="center")
+
+        self.mission_tree.heading("#6", text="Local Version")
+        self.mission_tree.column("#6", minwidth=50, width=150, anchor="center")
+
+        self.mission_tree.heading("#7", text="")
+        self.mission_tree.column("#7", minwidth=0, width=0)
+
+
+        for col in self.mission_tree['columns']:
+            self.mission_tree.heading(col, command=lambda _col=col: \
+                treeview_sort_column(self.mission_tree, _col, False))
 
         self.mission_tree.grid(row=1, column=3, sticky="NS")
         mission_vsb.grid(row=1, column=4, sticky='ns')
@@ -276,7 +375,7 @@ class Window(Frame):
 
         # Map Page
         map_page.grid_rowconfigure(10)
-        map_page.grid_columnconfigure(3, weight=1)
+        map_page.grid_columnconfigure(4, weight=1)
 
         map_content = Frame(map_page)
         map_content.grid(row=1, column=3, sticky="NS", pady=5)
@@ -284,29 +383,55 @@ class Window(Frame):
         map_content.grid_columnconfigure(2)
         map_vsb = Scrollbar(map_content, orient = "vertical")
         self.map_tree = Treeview(map_content, yscrollcommand = map_vsb.set)
+        self.map_tree.bind("<ButtonRelease-1>",
+                                lambda event, map_tree=self.map_tree: self.set_map_details(
+                                    map_tree))
+
         map_vsb.configure(command=self.map_tree.yview)
 
-        self.map_tree['columns'] = ("Name", "Tag Line", "Author", "Online_Version", "Local_Version", "resource_id")
-        self.map_tree['displaycolumns'] = ("Name", "Tag Line", "Author", "Online_Version", "Local_Version")
+        self.map_details = Frame(map_page)
+        self.map_details.grid(row=1, column=4, sticky="NS", padx=5, pady=5)
+        self.map_details.grid_rowconfigure(5)
+        self.map_details.grid_columnconfigure(1)
+
+        self.map_details_title = Label(self.map_details, text="")
+        self.map_details_title.grid(row=1, column=1)
+        self.map_image = Label(self.map_details, image=None, width=50)
+        self.map_image.grid(column=1, row=2, padx=10, pady=10)
+        self.map_details_tagline = Label(self.map_details, wraplength=300, text="", justify=CENTER)
+        self.map_details_tagline.grid(row=3, column=1)
+        self.map_details_description = Label(self.map_details, wraplength=300, text="", justify=LEFT)
+        self.map_details_description.grid(row=4, column=1, pady=10)
+
+
+        self.map_tree['columns'] = ("Name", "Downloads", "Rating", "Author", "Online_Version", "Local_Version", "resource_id")
+        self.map_tree['displaycolumns'] = ("Name", "Downloads", "Rating", "Author", "Online_Version", "Local_Version")
         self.map_tree.heading("#0", text="Name")
-        self.map_tree.column("#0", minwidth=200, width=200)
+        self.map_tree.column("#0", minwidth=200, width=250, anchor="center")
 
-        self.map_tree.heading("#1", text="Tag Line")
-        self.map_tree.column("#1", minwidth=250, width=550)
+        self.map_tree.heading("#1", text="Downloads")
+        self.map_tree.column("#1", minwidth=75, width=100, anchor="center")
 
-        self.map_tree.heading("#2", text="Author")
-        self.map_tree.column("#2", minwidth=100, width=100)
+        self.map_tree.heading("#2", text="Rating")
+        self.map_tree.column("#2", minwidth=50, width=50, anchor="center")
 
-        self.map_tree.heading("#3", text="Online Version")
-        self.map_tree.column("#3", minwidth=100, width=100)
+        self.map_tree.heading("#3", text="Author")
+        self.map_tree.column("#3", minwidth=100, width=75, anchor="center")
 
-        self.map_tree.heading("#4", text="Local Version")
-        self.map_tree.column("#4", minwidth=150, width=150)
+        self.map_tree.heading("#4", text="Online Version")
+        self.map_tree.column("#4", minwidth=100, width=100, anchor="center")
 
-        self.map_tree.heading("#5", text="")
-        self.map_tree.column("#5", minwidth=0, width=0)
+        self.map_tree.heading("#5", text="Local Version")
+        self.map_tree.column("#5", minwidth=150, width=250, anchor="center")
 
-        self.map_tree.grid(row=1, column=3, sticky="NS")
+        self.map_tree.heading("#6", text="")
+        self.map_tree.column("#6", minwidth=0, width=0)
+
+        for col in self.map_tree['columns']:
+            self.map_tree.heading(col, command=lambda _col=col: \
+                treeview_sort_column(self.map_tree, _col, False))
+
+        self.map_tree.grid(row=1, column=3, sticky="WNS")
         map_vsb.grid(row=1, column=4, sticky='ns')
 
         map_buttons = Frame(map_content)
@@ -330,12 +455,83 @@ class Window(Frame):
         self.master.config(menu=menu)
 
         file = Menu(menu, tearoff=False)
-        file.add_command(label="Refresh Data", command=self.refresh_all)
+        file.add_command(label="Check for client updates", command=self.check_for_updates)
         file.add_command(label="Exit", command=self.client_exit)
         menu.add_cascade(label="File", menu=file)
+
         menu.add_command(label="Update All", command=self.update_all)
+        menu.add_command(label="Refresh Tables", command=self.refresh_all)
         menu.add_command(label="About", command=self.make_about_window)
         t1.join()
+
+    def set_campaign_details(self, tree):
+        t = threading.Thread(target=self.set_campaign_details_thread, args=(tree,))
+        t.start()
+
+    def set_campaign_details_thread(self, tree):
+        try:
+            curItem = tree.focus()
+            resource = tree.item(curItem)
+            resource = self.vtol_sync.get_resource_by_id(resource['values'][-1])
+            self.campaign_details_title.configure(text=resource['title'])
+
+            image_url = resource['image_url']
+            raw_data = urllib.request.urlopen(image_url).read()
+            im = PIL.Image.open(io.BytesIO(raw_data))
+            image = PIL.ImageTk.PhotoImage(im)
+            self.campaign_image.configure(image=image)
+            self.campaign_image.photo = image
+
+            self.campaign_details_tagline.configure(text=resource['tag_line'])
+            self.campaign_details_last_updated.config(text="Online Version Updated: %s" % resource['last_updated'])
+
+        except IndexError as err:
+            pass
+
+    def set_mission_details(self, tree):
+        t = threading.Thread(target=self.set_mission_details_thread, args=(tree,))
+        t.start()
+
+    def set_mission_details_thread(self, tree):
+        try:
+            curItem = tree.focus()
+            resource = tree.item(curItem)
+            resource = self.vtol_sync.get_resource_by_id(resource['values'][-1])
+            self.mission_details_title.configure(text=resource['title'])
+
+            image_url = resource['image_url']
+            raw_data = urllib.request.urlopen(image_url).read()
+            im = PIL.Image.open(io.BytesIO(raw_data))
+            image = PIL.ImageTk.PhotoImage(im)
+            self.mission_image.configure(image=image)
+            self.mission_image.photo = image
+
+            self.mission_details_tagline.configure(text=resource['tag_line'])
+        except IndexError as err:
+            pass
+
+    def set_map_details(self, tree):
+        t = threading.Thread(target=self.set_map_details_thread, args=(tree,))
+        t.start()
+
+    def set_map_details_thread(self, tree):
+        try:
+            curItem = tree.focus()
+            resource = tree.item(curItem)
+            resource = self.vtol_sync.get_resource_by_id(resource['values'][-1])
+            self.map_details_title.configure(text=resource['title'])
+
+            image_url = resource['image_url']
+            raw_data = urllib.request.urlopen(image_url).read()
+            im = PIL.Image.open(io.BytesIO(raw_data))
+            image = PIL.ImageTk.PhotoImage(im)
+            self.map_image.configure(image=image)
+            self.map_image.photo = image
+
+            self.map_details_tagline.configure(text=resource['tag_line'])
+            #self.campaign_details_description.configure(text=resource['details']['description'])
+        except IndexError as err:
+            pass
 
     def status_message_updater(self):
         """ Updates the little status message in the bottom of the app. """
@@ -391,6 +587,7 @@ class Window(Frame):
             self.display_error("Resource Missing", "Resource is not downloaded, so there is no local location to open.")
         else:
             resource = self.vtol_sync.get_resource_by_vtol_id(tree_item.item(curItem)['text'], resource_type)
+            print(resource)
             os.startfile(resource['local_location'])
 
     def open_resource_in_browser(self, tree_item):
@@ -443,18 +640,19 @@ class Window(Frame):
         """ The actual function calling the download function. """
         try:
             self.vtol_sync.download_resource(resource)
+            if resource['resource_type'] == "map":
+                self.refresh_maps()
+            elif resource['resource_type'] == "campaign":
+                self.refresh_campaigns()
+            elif resource['resource_type'] == "mission":
+                self.refresh_missions()
+            else:
+                self.refresh_all()
         except Exception as err:
             self.put_msg("Error downloading resource: %s" % err)
             self.display_error("Error downloading resource", err)
 
-        if resource['resource_type'] == "map":
-            self.refresh_maps()
-        elif resource['resource_type'] == "campaign":
-            self.refresh_campaigns()
-        elif resource['resource_type'] == "mission":
-            self.refresh_missions()
-        else:
-            self.refresh_all()
+
 
     def download_button(self, tree_item):
         """ Handles various exceptions that may occur when downloading available/unavailable resources """
@@ -471,9 +669,10 @@ class Window(Frame):
 
     def update_all(self):
         """ Runs the update_all_thread in another thread. """
-        t1 = threading.Thread(target=self.update_all_thread)
-        t2 = threading.Thread(target=self.run_threads, args=([t1], "Updating all resources...", "Done!", True))
-        t2.start()
+        if messagebox.askyesno("Update All Resources?", "Are you sure you want to update all resources?"):
+            t1 = threading.Thread(target=self.update_all_thread)
+            t2 = threading.Thread(target=self.run_threads, args=([t1], "Updating all resources...", "Done!", True))
+            t2.start()
 
     def update_all_thread(self):
         """ Lazy/Hackjob way of splitting the function """
@@ -487,9 +686,11 @@ class Window(Frame):
         if not self.vtol_sync.vtolvrmissions_online:
             self.display_message("VTOLVRMissions.com Offline", "VTOLVRMissions.com is currently offline, we will only show local resources. Try refreshing data later.")
 
-        t1 = threading.Thread(target=self.refresh_maps_thread())
-        t2 = threading.Thread(target=self.run_threads, args=([t1], 'Refreshing map list', "Done!", True))
-        t2.start()
+        if not self.refresh_maps_running:
+            t1 = threading.Thread(target=self.refresh_maps_thread())
+            t2 = threading.Thread(target=self.run_threads, args=([t1], 'Refreshing map list', "Done!", True))
+            t2.start()
+            self.refresh_maps_running = True
 
     def refresh_maps_thread(self):
         """ Lazy/Hackjob way of splitting the function """
@@ -497,15 +698,19 @@ class Window(Frame):
         for i in self.map_tree.get_children():
             self.map_tree.delete(i)
         self.populate_maps()
+        self.refresh_maps_running = False
 
     def refresh_campaigns(self):
         """ Runs the refresh_campaigns_thread in another thread. """
         if not self.vtol_sync.vtolvrmissions_online:
             self.display_message("VTOLVRMissions.com Offline", "VTOLVRMissions.com is currently offline, we will only show local resources. Try refreshing data later.")
 
-        t1 = threading.Thread(target=self.refresh_campaigns_thread())
-        t2 = threading.Thread(target=self.run_threads, args=([t1], 'Refreshing campaign list', "Done!", True))
-        t2.start()
+        if not self.refresh_campaigns_running:
+            self.refresh_campaigns_running = True
+            t1 = threading.Thread(target=self.refresh_campaigns_thread())
+            t2 = threading.Thread(target=self.run_threads, args=([t1], 'Refreshing campaign list', "Done!", True))
+            t2.start()
+
 
     def refresh_campaigns_thread(self):
         """ Lazy/Hackjob way of splitting the function """
@@ -513,15 +718,18 @@ class Window(Frame):
         for i in self.campaign_tree.get_children():
             self.campaign_tree.delete(i)
         self.populate_campaigns()
+        self.refresh_campaigns_running = False
 
     def refresh_missions(self):
         """ Runs the refresh_mission_thread in another thread. """
         if not self.vtol_sync.vtolvrmissions_online:
             self.display_message("VTOLVRMissions.com Offline", "VTOLVRMissions.com is currently offline, we will only show local resources. Try refreshing data later.")
 
-        t1 = threading.Thread(target=self.refresh_missions_thread())
-        t2 = threading.Thread(target=self.run_threads, args=([t1], 'Refreshing mission list', "Done!", True))
-        t2.start()
+        if not self.refresh_missions_running:
+            self.refresh_missions_running = True
+            t1 = threading.Thread(target=self.refresh_missions_thread())
+            t2 = threading.Thread(target=self.run_threads, args=([t1], 'Refreshing mission list', "Done!", True))
+            t2.start()
 
     def refresh_missions_thread(self):
         """ Lazy/Hackjob way of splitting the function """
@@ -529,12 +737,13 @@ class Window(Frame):
         for i in self.mission_tree.get_children():
             self.mission_tree.delete(i)
         self.populate_missions()
+        self.refresh_missions_running = False
 
     def refresh_all_thread(self):
         """ Lazy/Hackjob way of splitting the function """
-        self.refresh_campaigns_thread()
-        self.refresh_maps_thread()
-        self.refresh_missions_thread()
+        self.refresh_campaigns()
+        self.refresh_maps()
+        self.refresh_missions()
 
     def refresh_all(self):
         """ Essentially the same thing a populate_all"""
@@ -580,36 +789,40 @@ class Window(Frame):
         for mission in self.vtol_sync.all_missions():
             if "managed" in mission:
                 if mission['managed']:
-                    self.mission_tree.insert("", "end", text="%s" % (mission['title']), values=(mission['tag_line'], mission['author'], mission['cur_version'], mission['local_version'], mission['resource_id']))
+
+                    values = (mission['downloads'], mission['rating'], mission['details']['category'], mission['author'], mission['cur_version'], mission['local_version'], mission['resource_id'])
+
+                    if not treeview_search(self.mission_tree, values):
+                        self.mission_tree.insert("", "end", text="%s" % (mission['title']), values=values)
                 else:
                     if self.show_unmanaged.get():
-                        self.mission_tree.insert("", "end", text="%s" % (mission['vtol_id']), values=("Unmanaged", "Unmanaged", "Unmanaged", "Unmanaged", "Unmanaged"))
+                        self.mission_tree.insert("", "end", text="%s" % (mission['vtol_id']), values=("Unmanaged", "Unmanaged", "Unmanaged" "Unmanaged", "Unmanaged", "Unmanaged", "Unmanaged"))
             else:
-                self.mission_tree.insert("", "end", text="%s" % (mission['title']), values=(mission['tag_line'], mission['author'], mission['cur_version'], "Not Downloaded", mission['resource_id']))
+                self.mission_tree.insert("", "end", text="%s" % (mission['title']), values=(mission['downloads'], mission['rating'], mission['details']['category'], mission['author'], mission['cur_version'], "Not Downloaded", mission['resource_id']))
 
     def populate_campaigns(self):
         """Populates the campaign table"""
         for campaign in self.vtol_sync.all_campaigns():
             if "managed" in campaign:
                 if campaign['managed']:
-                    self.campaign_tree.insert("", "end", text="%s" % (campaign['title']), values=(campaign['tag_line'], campaign['details']['category'], campaign['author'], campaign['cur_version'], campaign['local_version'], campaign['resource_id']))
+                    self.campaign_tree.insert("", "end", text="%s" % (campaign['title']), values=(campaign['downloads'], campaign['rating'], campaign['details']['category'], campaign['author'], campaign['cur_version'], campaign['local_version'], campaign['resource_id']))
                 else:
                     if self.show_unmanaged.get():
-                        self.campaign_tree.insert("", "end", text="%s" % (campaign['vtol_id']), values=("Unmanaged", "Unmanaged", "Unmanaged", "Unmanaged", "Unmanaged"))
+                        self.campaign_tree.insert("", "end", text="%s" % (campaign['vtol_id']), values=("Unmanaged", "Unmanaged", "Unmanaged", "Unmanaged", "Unmanaged", "Unmanaged"))
             else:
-                self.campaign_tree.insert("", "end", text="%s" % (campaign['title']), values=(campaign['tag_line'], campaign['details']['category'], campaign['author'], campaign['cur_version'], "Not Downloaded", campaign['resource_id']))
+                self.campaign_tree.insert("", "end", text="%s" % (campaign['title']), values=(campaign['downloads'], campaign['rating'], campaign['details']['category'], campaign['author'], campaign['cur_version'], "Not Downloaded", campaign['resource_id']))
 
     def populate_maps(self):
         """Populates the map table"""
         for map in self.vtol_sync.all_maps():
             if "managed" in map:
                 if map['managed']:
-                    self.map_tree.insert("", "end", text="%s" % (map['title']), values=(map['tag_line'], map['author'], map['cur_version'], map['local_version'], map['resource_id']))
+                    self.map_tree.insert("", "end", text="%s" % (map['title']), values=(int(map['downloads']), map['rating'], map['author'], map['cur_version'], map['local_version'], map['resource_id']))
                 else:
                     if self.show_unmanaged.get():
-                        self.map_tree.insert("", "end", text="%s" % (map['vtol_id']), values=("Unmanaged", "Unmanaged", "Unmanaged", "Unmanaged", "Unmanaged"))
+                        self.map_tree.insert("", "end", text="%s" % (map['vtol_id']), values=("Unmanaged", "Unmanaged", "Unmanaged", "Unmanaged", "Unmanaged", "Unmanaged"))
             else:
-                self.map_tree.insert("", "end", text="%s" % (map['title']), values=(map['tag_line'], map['author'], map['cur_version'], "Not Downloaded", map['resource_id']))
+                self.map_tree.insert("", "end", text="%s" % (map['title']), values=(int(map['downloads']), map['rating'], map['author'], map['cur_version'], "Not Downloaded", map['resource_id']))
 
 
     def client_exit(self):
@@ -622,7 +835,7 @@ class Window(Frame):
 
 def main():
     root = Tk()
-    root.geometry("1150x340")
+    root.geometry("1225x350")
     root.lift()
     os.system('''/usr/bin/osascript -e 'tell app "Finder" to set frontmost of process "Python" to true' ''')
 
