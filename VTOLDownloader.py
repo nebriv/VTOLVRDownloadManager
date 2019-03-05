@@ -13,13 +13,28 @@ import vdf
 from distutils.version import LooseVersion, StrictVersion
 import check_updates
 from dateutil import parser as date_parser
-from XenForoDownloader import XenForo
+from XenForo import XenForo
 import tempfile
+
+import taillogger
+
+#logger = logging.getLogger(__name__)
+
+# noinspection SpellCheckingInspection,SpellCheckingInspection
+#logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
 
 logger = logging.getLogger(__name__)
 
-# noinspection SpellCheckingInspection,SpellCheckingInspection
-logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
+tail = taillogger.tail
+
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+log_handler = tail.log_handler
+log_handler.setFormatter(formatter)
+logger.addHandler(log_handler)
+
+levels = [logging.INFO, logging.ERROR, logging.WARN, logging.DEBUG, logging.CRITICAL]
+logger.setLevel(logging.DEBUG)
 
 try:
     import winreg
@@ -37,7 +52,7 @@ try:
         raise Exception("Unhandled arch: %s" % proc_arch)
 except ImportError as err:
     winreg = False
-    logging.error("Unable to import winreg, will not be able to auto detect steam location")
+    logger.error("Unable to import winreg, will not be able to auto detect steam location")
 
 def exists_or_make(directory):
     if not os.path.exists(directory):
@@ -52,10 +67,10 @@ def find_vtol_map_root(directory):
             if any(extension in file for extension in map_extensions):
                 locations.append(each_dir[0])
             if any(extension in file for extension in bad_extensions):
-                logging.error("Unexpected extension while looking for map resources: %s" % file)
+                logger.error("Unexpected extension while looking for map resources: %s" % file)
                 raise FileExistsError("Unexpected extension while looking for map resources: %s" % file)
     if len(locations) > 1:
-        logging.error("More than one (%s) map resource found in download. \n This is currently unsupported by this client." % len(locations))
+        logger.error("More than one (%s) map resource found in download. \n This is currently unsupported by this client." % len(locations))
         raise FileExistsError("More than one (%s) map resource found in download. \n This is currently unsupported by this client." % len(locations))
     elif len(locations) == 1:
         return locations[0]
@@ -71,10 +86,10 @@ def find_vtol_campaign_root(directory):
             if any(extension in file for extension in campaign_extensions):
                 locations.append(each_dir[0])
             if any(extension in file for extension in bad_extensions):
-                logging.error("Unexpected extension while looking for campaign resources: %s" % file)
+                logger.error("Unexpected extension while looking for campaign resources: %s" % file)
                 raise FileExistsError("Unexpected extension while looking for campaign resources: %s" % file)
     if len(locations) > 1:
-        logging.error("More than one (%s) campaign resource found in download. \n This is currently unsupported by this client." % len(locations))
+        logger.error("More than one (%s) campaign resource found in download. \n This is currently unsupported by this client." % len(locations))
         raise FileExistsError("More than one (%s) campaign resource found in download. \n This is currently unsupported by this client." % len(locations))
     elif len(locations) == 1:
         return locations[0]
@@ -90,10 +105,10 @@ def find_vtol_mission_root(directory):
             if any(extension in file for extension in mission_extensions):
                 return each_dir[0]
             if any(extension in file for extension in bad_extensions):
-                logging.error("Unexpected extension while looking for mission resources: %s" % file)
+                logger.error("Unexpected extension while looking for mission resources: %s" % file)
                 raise FileExistsError("Unexpected extension while looking for mission resources: %s" % file)
     if len(locations) > 1:
-        logging.error("More than one (%s) campaign resource found in download. \n This is currently unsupported by this client." % len(locations))
+        logger.error("More than one (%s) campaign resource found in download. \n This is currently unsupported by this client." % len(locations))
         raise FileExistsError("More than one (%s) campaign resource found in download. \n This is currently unsupported by this client." % len(locations))
     elif len(locations) == 1:
         return locations[0]
@@ -102,7 +117,7 @@ def find_vtol_mission_root(directory):
 
 def auto_discover_vtol_dir():
     try:
-        logging.info("Autodetecting VTOL VR directory...")
+        logger.info("Autodetecting VTOL VR directory...")
         if winreg:
             key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Software\\Valve\\Steam")
             value = winreg.QueryValueEx(key, "SteamPath")[0]
@@ -121,7 +136,7 @@ def auto_discover_vtol_dir():
             for each in steam_libraries:
                 for folder in os.walk(os.path.join(each, "steamapps", "common")):
                     if "VTOL VR" in folder[0]:
-                        logging.info("Found VTOL VR HERE: %s" % folder[0])
+                        logger.info("Found VTOL VR HERE: %s" % folder[0])
                         return folder[0]
         else:
             raise ModuleNotFoundError("WinReg is missing, unable to autodetect steam install location")
@@ -179,7 +194,7 @@ class Syncer:
         try:
             shutil.rmtree(self.download_dir)
         except Exception as err:
-            logging.error("Error cleaning up temp folders: %s" % err)
+            logger.error("Error cleaning up temp folders: %s" % err)
 
     @staticmethod
     def parse_vtol_map_file(directory):
@@ -249,7 +264,7 @@ class Syncer:
                 for chunk in r:
                     f.write(chunk)
 
-        logging.info("Done downloading")
+        logger.info("Done downloading")
 
         if os.path.exists(download_file):
             output_folder = "vtolvrmissions.com_" + ".".join(download_file.split(".")[:-1]).split(os.sep)[-1]
@@ -262,9 +277,9 @@ class Syncer:
             else:
                 zip_dir = os.path.join(self.others_directory, output_folder)
 
-            logging.info("Unzipping %s" % download_file)
+            logger.info("Unzipping %s" % download_file)
             Archive(download_file).extractall(zip_dir, auto_create_dir=True)
-            logging.info("Unzipped")
+            logger.info("Unzipped")
 
             resource_metadata = resource
             resource_metadata['download_date'] = datetime.datetime.now()
@@ -281,13 +296,13 @@ class Syncer:
                     if vtol_id:
                         if self.get_resource_by_vtol_id(vtol_id,
                                                         resource_type=resource['resource_type']) and not update:
-                            logging.error("Map with same ID already exists")
+                            logger.error("Map with same ID already exists")
                             raise ValueError("Map with same ID already exists at %s" %
                                              self.get_resource_by_vtol_id(vtol_id,
                                                                           resource_type=resource['resource_type'])[
                                                  'local_location'])
                         if root_folder_name != vtol_id:
-                            logging.warning(
+                            logger.warning(
                                 "Map Folder and VTOL MAP ID do not match. "
                                 "This is likely an error in how the author packaged the resource.")
 
@@ -297,11 +312,11 @@ class Syncer:
                     with open(os.path.join(root, "vtolvrmissions.com_metadata.json"), 'w') as metadata_file:
                         metadata_file.write(json.dumps(resource_metadata, default=str))
                     copy(root, move_path)
-                    logging.info("Done moving %s... cleaning up temp" % root)
+                    logger.info("Done moving %s... cleaning up temp" % root)
                     shutil.rmtree(zip_dir)
                     os.remove(download_file)
                 else:
-                    logging.error("There is an error parsing the VTOL VR Map files. No map data found within download.")
+                    logger.error("There is an error parsing the VTOL VR Map files. No map data found within download.")
             elif resource['resource_type'] == "campaign":
                 root = find_vtol_campaign_root(zip_dir)
                 root_folder_name = root.split(os.sep)[-1]
@@ -310,13 +325,13 @@ class Syncer:
                     if vtol_id:
                         if self.get_resource_by_vtol_id(vtol_id,
                                                         resource_type=resource['resource_type']) and not update:
-                            logging.error("Campaign with same ID already exists")
+                            logger.error("Campaign with same ID already exists")
                             raise ValueError("Campaign with same ID already exists at %s" %
                                              self.get_resource_by_vtol_id(vtol_id,
                                                                           resource_type=resource['resource_type'])[
                                                  'local_location'])
                         if root_folder_name != vtol_id:
-                            logging.warning(
+                            logger.warning(
                                 "Campaign Folder and VTOL Campaign ID do not match."
                                 " This is likely an error in how the author packaged the resource.")
 
@@ -328,12 +343,12 @@ class Syncer:
                         metadata_file.write(json.dumps(resource_metadata, default=str))
 
                     copy(root, move_path)
-                    logging.info("Done moving %s... cleaning up temp" % root)
+                    logger.info("Done moving %s... cleaning up temp" % root)
                     shutil.rmtree(zip_dir)
                     os.remove(download_file)
 
                 else:
-                    logging.error(
+                    logger.error(
                         "There is an error parsing the VTOL VR Campaign files. No campaign data found within download.")
             elif resource['resource_type'] == "mission":
                 root = find_vtol_mission_root(zip_dir)
@@ -343,13 +358,13 @@ class Syncer:
                     if vtol_id:
                         if self.get_resource_by_vtol_id(vtol_id,
                                                         resource_type=resource['resource_type']) and not update:
-                            logging.error("Mission with same ID already exists")
+                            logger.error("Mission with same ID already exists")
                             raise ValueError("Mission with same ID already exists at %s" %
                                              self.get_resource_by_vtol_id(vtol_id,
                                                                           resource_type=resource['resource_type'])[
                                                  'local_location'])
                         if root_folder_name != vtol_id:
-                            logging.warning(
+                            logger.warning(
                                 "Mission Folder and VTOL Mission ID do not match, "
                                 "it is possible this mission may not work as expected. "
                                 "This is likely an error in how the author packaged the resource.")
@@ -361,11 +376,11 @@ class Syncer:
                         metadata_file.write(json.dumps(resource_metadata, default=str))
 
                     copy(root, move_path)
-                    logging.info("Done moving %s... cleaning up temp" % root)
+                    logger.info("Done moving %s... cleaning up temp" % root)
                     shutil.rmtree(zip_dir)
                     os.remove(download_file)
                 else:
-                    logging.error(
+                    logger.error(
                         "There is an error parsing the VTOL VR Mission files. No mission data found within download.")
 
     def get_resource_by_vtol_id(self, vtol_id, resource_type):
@@ -450,11 +465,11 @@ class Syncer:
                 return True
             return False
         except Exception as err_msg:
-            logging.error("Error while removing %s: %s" % (resource['title'], err_msg))
+            logger.error("Error while removing %s: %s" % (resource['title'], err_msg))
             return False
 
     def get_local_maps(self):
-        logging.info("Looking for local VTOLVRMissions.com maps")
+        logger.info("Looking for local VTOLVRMissions.com maps")
         maps = []
         local = []
         try:
@@ -480,7 +495,7 @@ class Syncer:
                                         self.maps.append(metadata)
                                         local.append(metadata)
                                 else:
-                                    logging.error("Error parsing metadata for map: %s" % (
+                                    logger.error("Error parsing metadata for map: %s" % (
                                         os.path.join(self.vtolvr_dir, "CustomMaps", each_map)))
                                     metadata = {"local_location": os.path.join(self.vtolvr_dir, "CustomMaps", each_map),
                                                 "vtol_id": vtol_id, "resource_type": "map", "managed": False,
@@ -499,16 +514,16 @@ class Syncer:
 
             for each in local:
                 if "local_version" in each:
-                    logging.debug("Found downloaded map (%s): %s (ver. %s) - downloaded on %s" % (
+                    logger.debug("Found downloaded map (%s): %s (ver. %s) - downloaded on %s" % (
                         each['local_location'], each['title'], each['local_version'], each['download_date']))
                 else:
-                    logging.debug("Found unmanaged map: %s" % each)
+                    logger.debug("Found unmanaged map: %s" % each)
 
         except FileNotFoundError as err_msg:
-            logging.error("Unable to find CustomMaps folder - bad steam directory? %s" % err_msg)
+            logger.error("Unable to find CustomMaps folder - bad steam directory? %s" % err_msg)
 
     def get_local_missions(self):
-        logging.info("Looking for local VTOLVRMissions.com missions")
+        logger.info("Looking for local VTOLVRMissions.com missions")
         missions = []
         local = []
         try:
@@ -531,7 +546,7 @@ class Syncer:
                                         self.missions.append(metadata)
                                         local.append(metadata)
                                 else:
-                                    logging.error("Error parsing metadata for mission: %s" % (
+                                    logger.error("Error parsing metadata for mission: %s" % (
                                         os.path.join(self.vtolvr_dir, "CustomScenarios", mission)))
                                     metadata = {
                                         "local_location": os.path.join(self.vtolvr_dir, "CustomScenarios",
@@ -551,15 +566,15 @@ class Syncer:
 
             for each in local:
                 if "local_version" in each:
-                    logging.debug("Found downloaded mission (%s): %s (ver. %s) - downloaded on %s" % (
+                    logger.debug("Found downloaded mission (%s): %s (ver. %s) - downloaded on %s" % (
                         each['local_location'], each['title'], each['local_version'], each['download_date']))
                 else:
-                    logging.debug("Found unmanaged mission: %s" % each)
+                    logger.debug("Found unmanaged mission: %s" % each)
         except FileNotFoundError as err_msg:
-            logging.error("Unable to find CustomScenarios folder - bad steam directory? %s" % err_msg)
+            logger.error("Unable to find CustomScenarios folder - bad steam directory? %s" % err_msg)
 
     def get_local_campaigns(self):
-        logging.info("Looking for local VTOLVRMissions.com campaigns")
+        logger.info("Looking for local VTOLVRMissions.com campaigns")
         campaigns = []
         local = []
         try:
@@ -583,7 +598,7 @@ class Syncer:
                                         self.campaigns.append(metadata)
                                         local.append(metadata)
                                 else:
-                                    logging.error("Error parsing metadata for campaign: %s" % (
+                                    logger.error("Error parsing metadata for campaign: %s" % (
                                         os.path.join(self.vtolvr_dir, "CustomScenarios", "Campaigns", campaign)))
                                     metadata = {
                                         "local_location": os.path.join(self.vtolvr_dir, "CustomScenarios", "Campaigns",
@@ -603,12 +618,12 @@ class Syncer:
 
             for each in local:
                 if "local_version" in each:
-                    logging.debug("Found downloaded mission (%s): %s (ver. %s) - downloaded on %s" % (
+                    logger.debug("Found downloaded mission (%s): %s (ver. %s) - downloaded on %s" % (
                         each['local_location'], each['title'], each['local_version'], each['download_date']))
                 else:
-                    logging.debug("Found unmanaged mission: %s" % each)
+                    logger.debug("Found unmanaged mission: %s" % each)
         except FileNotFoundError as err_msg:
-            logging.error("Unable to find CustomScenarios folder - bad steam directory? %s" % err_msg)
+            logger.error("Unable to find CustomScenarios folder - bad steam directory? %s" % err_msg)
 
     @staticmethod
     def new_version_check(resource):
@@ -626,7 +641,7 @@ class Syncer:
         return self.vtolvrmissions_online
 
     def check_for_updates(self):
-        logging.info("Checking maps for updates...")
+        logger.info("Checking maps for updates...")
         for each in self.maps:
             # print(each)
             online = next(item for item in self.online_maps if item["resource_id"] == each['resource_id'])
@@ -636,29 +651,29 @@ class Syncer:
                             each['metadata']['resource_name'], each['metadata']['version'], online['cur_version']))):
                         self.download_resource(online)
                 else:
-                    logging.info("%s is up to date (current ver: %s - latest ver: %s)" % (
+                    logger.info("%s is up to date (current ver: %s - latest ver: %s)" % (
                         each['metadata']['resource_name'], each['metadata']['version'], online['cur_version']))
 
-        logging.info("Checking campaigns for updates...")
+        logger.info("Checking campaigns for updates...")
         for each in self.campaigns:
             online = next(item for item in self.online_campaigns if item["resource_id"] == each['resource_id'])
             if online:
                 if LooseVersion(each['metadata']['version']) < LooseVersion(online['cur_version']):
-                    logging.info("%s is out of date (current ver: %s - latest ver: %s)" % (
+                    logger.info("%s is out of date (current ver: %s - latest ver: %s)" % (
                         each['metadata']['resource_name'], each['metadata']['version'], online['cur_version']))
                 else:
-                    logging.info("%s is up to date (current ver: %s - latest ver: %s)" % (
+                    logger.info("%s is up to date (current ver: %s - latest ver: %s)" % (
                         each['metadata']['resource_name'], each['metadata']['version'], online['cur_version']))
 
-        logging.info("Checking missions for updates...")
+        logger.info("Checking missions for updates...")
         for each in self.missions:
             online = next(item for item in self.online_missions if item["resource_id"] == each['resource_id'])
             if online:
                 if LooseVersion(each['metadata']['version']) < LooseVersion(online['cur_version']):
-                    logging.info("%s is out of date (current ver: %s - latest ver: %s)" % (
+                    logger.info("%s is out of date (current ver: %s - latest ver: %s)" % (
                         each['metadata']['resource_name'], each['metadata']['version'], online['cur_version']))
                 else:
-                    logging.info("%s is up to date (current ver: %s - latest ver: %s)" % (
+                    logger.info("%s is up to date (current ver: %s - latest ver: %s)" % (
                         each['metadata']['resource_name'], each['metadata']['version'], online['cur_version']))
 
     def all_campaigns(self):
@@ -721,12 +736,12 @@ class Syncer:
             self.get_online_missions()
             self.get_online_maps()
         except requests.ConnectionError as err_msg:
-            logging.error("Error connecting to %s: %s" % (self.vtolvrmissions_url, err_msg))
+            logger.error("Error connecting to %s: %s" % (self.vtolvrmissions_url, err_msg))
             raise ConnectionError("Error connecting to %s: %s" % (self.vtolvrmissions_url, err_msg))
 
     def get_online_missions(self):
         try:
-            logging.info("Getting Available Missions from %s" % self.vtolvrmissions_url)
+            logger.info("Getting Available Missions from %s" % self.vtolvrmissions_url)
             results = self.xen.get_resources("resources/categories/missions.6/", resource_type="mission")
             for each in results:
                 if not self.get_resource_by_id(each['resource_id']):
@@ -742,7 +757,7 @@ class Syncer:
 
     def get_online_campaigns(self):
         try:
-            logging.info("Getting Available Campaigns from %s" % self.vtolvrmissions_url)
+            logger.info("Getting Available Campaigns from %s" % self.vtolvrmissions_url)
             results = self.xen.get_resources("resources/categories/campaigns.3/", resource_type="campaign")
             for each in results:
                 if not self.get_resource_by_id(each['resource_id']):
@@ -759,7 +774,7 @@ class Syncer:
 
     def get_online_maps(self):
         try:
-            logging.info("Getting Available Maps from %s" % self.vtolvrmissions_url)
+            logger.info("Getting Available Maps from %s" % self.vtolvrmissions_url)
             results = self.xen.get_resources("resources/categories/maps.10", resource_type="map")
             for each in results:
                 if not self.get_resource_by_id(each['resource_id']):
@@ -805,7 +820,7 @@ def main():
     try:
         steam_dir = auto_discover_vtol_dir()
     except ModuleNotFoundError as err_msg:
-        logging.error("%s" % err_msg)
+        logger.error("%s" % err_msg)
         steam_dir = ""
 
     vtol_sync = Syncer(steam_dir, "https://www.vtolvrmissions.com/")

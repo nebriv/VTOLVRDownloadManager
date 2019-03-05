@@ -3,6 +3,20 @@ from bs4 import BeautifulSoup
 import logging
 from dateutil import parser as date_parser
 
+import taillogger
+
+logger = logging.getLogger(__name__)
+
+tail = taillogger.tail
+
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+log_handler = tail.log_handler
+log_handler.setFormatter(formatter)
+logger.addHandler(log_handler)
+
+levels = [logging.INFO, logging.ERROR, logging.WARN, logging.DEBUG, logging.CRITICAL]
+logger.setLevel(logging.DEBUG)
 
 class XenForo:
     def __init__(self, url):
@@ -11,12 +25,12 @@ class XenForo:
     @staticmethod
     def _get_page(url):
 
-        logging.debug("Fetching URL: %s" % url)
+        logger.debug("Fetching URL: %s" % url)
         data = requests.get(url)
         if data.ok:
             return data.content
         else:
-            logging.error("Error downloading data from %s" % url)
+            logger.error("Error downloading data from %s" % url)
             raise ConnectionError("Error downloading data from %s" % url)
 
     def _get_resource_details(self, resource_page):
@@ -61,7 +75,7 @@ class XenForo:
             downloads = resource_stats.find("dl", {"class": "resourceDownloads"}).text.split("Downloads: ")[1]
             last_updated = date_parser.parse(resource_stats.find("dl", {"class": "resourceUpdated"}).text.split("Updated: ")[1]).strftime("%Y-%m-%d")
 
-            logging.debug("Getting resource details page: %s" % resource_link)
+            logger.debug("Getting resource details page: %s" % resource_link)
             if get_details:
                 details = self._get_resource_details(self.url + resource_link)
             else:
@@ -106,5 +120,5 @@ class XenForo:
             else:
                 return False
         except Exception as err:
-            logging.error(err)
+            logger.error(err)
             return False

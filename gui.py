@@ -1,9 +1,8 @@
-from tkinter import *
 import os
 from tkinter.ttk import Frame, Button, Style
 from tkinter import simpledialog
 from tkinter import ttk
-from downloader import Syncer, auto_discover_vtol_dir
+from VTOLDownloader import Syncer, auto_discover_vtol_dir
 from tkinter import messagebox
 import time
 import queue
@@ -12,6 +11,7 @@ import threading
 import logging
 import PIL.ImageTk, PIL.Image
 import urllib, io
+import taillogger
 
 try:
     from Tkinter import *
@@ -23,23 +23,30 @@ except ImportError:  # Python 3
 import tempfile, zlib
 import check_updates
 from urllib.request import urlopen
-import tkinter as tk
 import icon_base64
+
+logger = logging.getLogger(__name__)
+
+tail = taillogger.tail
+
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+log_handler = tail.log_handler
+log_handler.setFormatter(formatter)
+logger.addHandler(log_handler)
+
+levels = [logging.INFO, logging.ERROR, logging.WARN, logging.DEBUG, logging.CRITICAL]
+logger.setLevel(logging.DEBUG)
 
 
 _, ICON_PATH = tempfile.mkstemp()
 with open(ICON_PATH, 'wb') as icon_file:
     icon_file.write(icon_base64.ICON)
 
-__version__ = "v1.1.1"
+__version__ = "v1.2"
 __author__ = "nebriv"
 githuburl = "https://github.com/nebriv/VTOLVRDownloadManager"
 
-# datafile = "icon.ico"
-# if not hasattr(sys, "frozen"):
-#     datafile = os.path.join(os.path.dirname(__file__), datafile)
-# else:
-#     datafile = os.path.join(sys.prefix, datafile)
 
 def treeview_sort_column(tv, col, reverse):
 
@@ -100,7 +107,7 @@ class Window(Frame):
             self.master.iconbitmap(default=ICON_PATH)
             #self.master.tk.call('wm', 'iconphoto', self.master._w, tk.PhotoImage(file=ICON_PATH))
         except Exception as err_msg:
-            logging.error("Logo icon doesn't exist: %s" % err_msg)
+            logger.error("Logo icon doesn't exist: %s" % err_msg)
         self.loading_label_text.set("Loading...")
         self.vtol_sync = None
         self.main_window()
@@ -163,7 +170,7 @@ class Window(Frame):
 
     def online_recheck(self):
         if not self.vtol_sync.vtolvrmissions_online and self.recheck_running == False and self.run_connectivity_checks.get():
-            logging.info("Checking if vtolvrmissions.com is back online...")
+            logger.info("Checking if vtolvrmissions.com is back online...")
             self.recheck_running = True
             self.vtol_online_text.set("VTOLVRMissions.com: Checking")
             self.vtol_sync.check_vtol_vr_online()
@@ -200,6 +207,8 @@ class Window(Frame):
 
         settings_page = ttk.Frame(nb)
         nb.add(settings_page, text="Settings")
+        logger_page = ttk.Frame(nb)
+        nb.add(logger_page, text="Log Viewer")
 
         nb.grid(row=1, column=1, columnspan=3)
 
@@ -208,6 +217,35 @@ class Window(Frame):
         settings_page.grid_columnconfigure(2, weight=1)
         Checkbutton(settings_page, text="Show Unmanaged Resources", variable=self.show_unmanaged, command=self.refresh_all).grid(row=0, sticky=W, padx=5)
         Checkbutton(settings_page, text="Perform Connectivity Checks when offline", variable=self.run_connectivity_checks).grid(row=1, sticky=W, padx=5)
+        #Entry(settings_page, textvariable=self.steam_dir).grid(row=2, sticky=W, padx=5)
+
+        # Logger Page
+        logger_page.grid_rowconfigure(3)
+        logger_page.grid_columnconfigure(1, weight=1)
+
+        log_vsb = Scrollbar(logger_page)
+        log_hsb = Scrollbar(logger_page, orient=HORIZONTAL)
+        self.log_area = Text(logger_page, height=15, width=130, yscrollcommand=log_vsb.set, xscrollcommand=log_hsb.set, wrap=NONE)
+        self.log_area.grid(column=1, row=1, pady=5, sticky='we')
+        self.log_area.bind("<Key>", lambda e: "break")
+        log_vsb.grid(row=1, column=2, sticky='wns')
+        log_hsb.grid(row=2, column=1, sticky='wes', pady=5)
+        log_hsb.configure(command=self.log_area.xview)
+        log_vsb.configure(command=self.log_area.yview)
+
+        # log_buttons = Frame(logger_page)
+        # log_buttons.grid(row=3, column=1, pady=5)
+        # log_buttons.grid_rowconfigure(1)
+        # log_buttons.grid_columnconfigure(2)
+        #
+        # log_clear = Button(log_buttons, text="Clear")
+        # log_clear.grid(row=1,column=1)
+        # log_save = Button(log_buttons, text="Save")
+        # log_save.grid(row=1,column=2)
+
+
+        #Checkbutton(logger_page, text="Show Unmanaged Resources", variable=self.show_unmanaged, command=self.refresh_all).grid(row=0, sticky=W, padx=5)
+        #Checkbutton(logger_page, text="Perform Connectivity Checks when offline", variable=self.run_connectivity_checks).grid(row=1, sticky=W, padx=5)
         #Entry(settings_page, textvariable=self.steam_dir).grid(row=2, sticky=W, padx=5)
 
         # Campaign Page
@@ -320,7 +358,7 @@ class Window(Frame):
         self.mission_details_last_updated.grid(row=4, column=1, pady=10)
 
         self.mission_details_description = Label(self.mission_details, wraplength=300, text="", justify=LEFT)
-        self.mission_details_description.grid(row=4, column=1, pady=10)
+        self.mission_details_description.grid(row=5, column=1, pady=10)
 
 
         self.mission_tree['columns'] = ("Name", "Downloads", "Rating", "Category", "Author", "Online_Version", "Local_Version", "resource_id")
@@ -406,7 +444,7 @@ class Window(Frame):
         self.map_details_last_updated.grid(row=4, column=1, pady=10)
 
         self.map_details_description = Label(self.map_details, wraplength=300, text="", justify=LEFT)
-        self.map_details_description.grid(row=4, column=1, pady=10)
+        self.map_details_description.grid(row=5, column=1, pady=10)
 
 
         self.map_tree['columns'] = ("Name", "Downloads", "Rating", "Author", "Online_Version", "Local_Version", "resource_id")
@@ -540,8 +578,16 @@ class Window(Frame):
         except IndexError as err:
             pass
 
+    def get_log_lines(self):
+        #print(downloader_logs.contents())
+        for line in taillogger.tail.contents():
+            self.log_area.insert(END, line + "\n")
+
     def status_message_updater(self):
         """ Updates the little status message in the bottom of the app. """
+
+        self.get_log_lines()
+
         while self.status_queue.qsize():
             msg = self.status_queue.get(0)
             self.loading_label_text.set(msg)
@@ -549,6 +595,7 @@ class Window(Frame):
                 self.vtol_online_text.set("VTOLVRMissions.com: Online")
             else:
                 self.vtol_online_text.set("VTOLVRMissions.com: Offline")
+
 
         if not self.vtol_sync.vtolvrmissions_online and not self.recheck_running and self.run_connectivity_checks.get():
             thread = threading.Thread(target=self.online_recheck)
@@ -560,7 +607,7 @@ class Window(Frame):
         try:
             steam_dir = auto_discover_vtol_dir()
         except Exception as err:
-            logging.error("%s" % err)
+            logger.error("%s" % err)
             steam_dir = self.steam_directory_prompt()
 
 
@@ -838,10 +885,11 @@ class Window(Frame):
             if self.vtol_sync:
                 self.vtol_sync.clean_up_temp_folders()
         except Exception as err:
-            logging.error("Error cleaning up temp: %s" % err)
+            logger.error("Error cleaning up temp: %s" % err)
         sys.exit(0)
 
 def main():
+
     root = Tk()
     root.geometry("1225x350")
     root.lift()
