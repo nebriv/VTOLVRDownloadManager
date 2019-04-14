@@ -61,13 +61,15 @@ except ImportError as err:
 
 def winapi_path(dos_path, encoding=None):
     path = os.path.abspath(dos_path)
-
-    if path.startswith("\\\\"):
-        path = "\\\\?\\UNC\\" + path[2:]
+    if "\\\\?\\UNC\\" not in path or "\\\\?\\" not in path:
+        if path.startswith("\\\\"):
+            path = "\\\\?\\UNC\\" + path[2:]
+        else:
+            path = "\\\\?\\" + path
+        return path
     else:
-        path = "\\\\?\\" + path
+        return dos_path
 
-    return path
 
 class ZipfileLongPaths(zipfile.ZipFile):
     def _extract_member(self, member, targetpath, pwd):
@@ -167,22 +169,7 @@ def auto_discover_vtol_dir():
 def copy(src, dst):
     import os
     import shutil
-
     shutil.copytree(src, dst)
-
-    # for src_dir, dirs, files in os.walk(src):
-    #     dst_dir = src_dir.replace(src, dst, 1)
-    #     if not os.path.exists(dst_dir):
-    #         os.makedirs(dst_dir)
-    #     for file_ in files:
-    #         src_file = os.path.join(src_dir, file_)
-    #         dst_file = os.path.join(dst_dir, file_)
-    #         if os.path.exists(dst_file):
-    #             # in case of the src and dst are the same file
-    #             if os.path.samefile(src_file, dst_file):
-    #                 continue
-    #             os.remove(dst_file)
-    #         shutil.move(src_file, dst_dir)
 
 class Syncer:
     def __init__(self, vtolvr_dir, url, download_directory="vtolvrmissions_temp"):
@@ -222,7 +209,7 @@ class Syncer:
     def parse_vtol_map_file(directory):
         for each in os.listdir(directory):
             if each.endswith(".vtm"):
-                with open(os.path.join(directory, each)) as map_file:
+                with open(winapi_path(os.path.join(directory, each))) as map_file:
                     lines = map_file.readlines()
                     if "VTMapCustom" in lines[0]:
                         for line in lines:
@@ -306,6 +293,7 @@ class Syncer:
 
 
             if zipfile.is_zipfile(download_file):
+                logger.debug("It's a zip file!")
                 try:
                     with zipfile.ZipFile(download_file, 'r') as zip_ref:
                         zip_ref.extractall(winapi_path(zip_dir))
@@ -337,7 +325,7 @@ class Syncer:
             # Extracting the root folder (if someone uploads a nested file or something,
             #  we only want the one containing the correct data
             if resource['resource_type'] == "map":
-                root = find_vtol_map_root(zip_dir)
+                root = find_vtol_map_root(winapi_path(zip_dir))
                 root_folder_name = root.split(os.sep)[-1]
                 if root:
                     vtol_id = self.parse_vtol_map_file(root)
@@ -361,12 +349,12 @@ class Syncer:
                         metadata_file.write(json.dumps(resource_metadata, default=str))
                     copy(root, move_path)
                     logger.info("Done moving %s... cleaning up temp" % root)
-                    shutil.rmtree(zip_dir)
+                    shutil.rmtree(winapi_path(zip_dir), ignore_errors=True)
                     os.remove(download_file)
                 else:
                     logger.error("There is an error parsing the VTOL VR Map files. No map data found within download.")
             elif resource['resource_type'] == "campaign":
-                root = find_vtol_campaign_root(zip_dir)
+                root = find_vtol_campaign_root(winapi_path(zip_dir))
                 root_folder_name = root.split(os.sep)[-1]
                 if root:
                     vtol_id = self.parse_vtol_campaign_file(root)
@@ -392,14 +380,14 @@ class Syncer:
 
                     copy(root, move_path)
                     logger.info("Done moving %s... cleaning up temp" % root)
-                    shutil.rmtree(zip_dir)
+                    shutil.rmtree(winapi_path(zip_dir), ignore_errors=True)
                     os.remove(download_file)
 
                 else:
                     logger.error(
                         "There is an error parsing the VTOL VR Campaign files. No campaign data found within download.")
             elif resource['resource_type'] == "mission":
-                root = find_vtol_mission_root(zip_dir)
+                root = find_vtol_mission_root(winapi_path(zip_dir))
                 if root:
                     vtol_id = self.parse_vtol_scenario_file(root)
                     root_folder_name = root.split(os.sep)[-1]
@@ -425,13 +413,16 @@ class Syncer:
 
                     copy(root, move_path)
                     logger.info("Done moving %s... cleaning up temp" % root)
-                    shutil.rmtree(zip_dir)
+                    shutil.rmtree(winapi_path(zip_dir), ignore_errors=True)
                     os.remove(download_file)
                 else:
                     logger.error(
                         "There is an error parsing the VTOL VR Mission files. No mission data found within download.")
 
     def get_resource_by_vtol_id(self, vtol_id, resource_type):
+        #print(self.maps)
+        #print(self.missions)
+        #print(self.campaigns)
         if resource_type == "map":
             for each_map in self.maps:
                 if "vtol_id" in each_map:

@@ -70,7 +70,6 @@ def treeview_search(treeview, comparevalue):
     children = treeview.get_children('')
     for child in children:
         values = treeview.item(child, 'values')
-        print(comparevalue[0], values[0])
         if comparevalue[0]==values[0] and str(comparevalue[1])==str(values[1]):
 
             return True
@@ -633,15 +632,20 @@ class Window(Frame):
 
     def open_resource_location(self, tree_item, resource_type):
         """ Opens the selected resource in the OS's file explorer (hopefully) """
-        curItem = tree_item.focus()
-        if "" == curItem:
-            self.display_error("Unselected Resource", "No resource selected, pick an item from the list and try again.")
-        elif tree_item.item(curItem)['values'][-2] == "Not Downloaded":
-            self.display_error("Resource Missing", "Resource is not downloaded, so there is no local location to open.")
-        else:
-            resource = self.vtol_sync.get_resource_by_vtol_id(tree_item.item(curItem)['text'], resource_type)
-            print(resource)
-            os.startfile(resource['local_location'])
+        try:
+            curItem = tree_item.focus()
+            if "" == curItem:
+                self.display_error("Unselected Resource", "No resource selected, pick an item from the list and try again.")
+            elif tree_item.item(curItem)['values'][-2] == "Not Downloaded":
+                self.display_error("Resource Missing", "Resource is not downloaded, so there is no local location to open.")
+            else:
+                #print(tree_item.item(curItem)['values'][-1])
+                resource = self.vtol_sync.get_resource_by_id(tree_item.item(curItem)['values'][-1])
+                #print(resource)
+                os.startfile(resource['local_location'])
+        except Exception as err:
+            logger.error("Error opening resouce: %s" % err)
+            self.display_error("Error opening resource", err)
 
     def open_resource_in_browser(self, tree_item):
         """Opens the selected resource in the user's default browser."""
