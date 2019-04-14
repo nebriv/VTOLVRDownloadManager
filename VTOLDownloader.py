@@ -15,9 +15,10 @@ import check_updates
 from dateutil import parser as date_parser
 from XenForo import XenForo
 import tempfile
-
+import patoolib
+import zipfile
 import taillogger
-
+import sys
 #logger = logging.getLogger(__name__)
 
 # noinspection SpellCheckingInspection,SpellCheckingInspection
@@ -36,6 +37,10 @@ logger.addHandler(log_handler)
 levels = [logging.INFO, logging.ERROR, logging.WARN, logging.DEBUG, logging.CRITICAL]
 logger.setLevel(logging.DEBUG)
 
+
+
+
+
 try:
     import winreg
 
@@ -53,6 +58,21 @@ try:
 except ImportError as err:
     winreg = False
     logger.error("Unable to import winreg, will not be able to auto detect steam location")
+
+def winapi_path(dos_path, encoding=None):
+    path = os.path.abspath(dos_path)
+
+    if path.startswith("\\\\"):
+        path = "\\\\?\\UNC\\" + path[2:]
+    else:
+        path = "\\\\?\\" + path
+
+    return path
+
+class ZipfileLongPaths(zipfile.ZipFile):
+    def _extract_member(self, member, targetpath, pwd):
+        targetpath = winapi_path(targetpath)
+        return zipfile.ZipFile._extract_member(self, member, targetpath, pwd)
 
 def exists_or_make(directory):
     if not os.path.exists(directory):
@@ -80,7 +100,7 @@ def find_vtol_map_root(directory):
 def find_vtol_campaign_root(directory):
     locations = []
     campaign_extensions = ['.vtc']
-    bad_extensions = ['.vtm']
+    bad_extensions = []
     for each_dir in os.walk(directory):
         for file in each_dir[2]:
             if any(extension in file for extension in campaign_extensions):
@@ -148,19 +168,21 @@ def copy(src, dst):
     import os
     import shutil
 
-    for src_dir, dirs, files in os.walk(src):
-        dst_dir = src_dir.replace(src, dst, 1)
-        if not os.path.exists(dst_dir):
-            os.makedirs(dst_dir)
-        for file_ in files:
-            src_file = os.path.join(src_dir, file_)
-            dst_file = os.path.join(dst_dir, file_)
-            if os.path.exists(dst_file):
-                # in case of the src and dst are the same file
-                if os.path.samefile(src_file, dst_file):
-                    continue
-                os.remove(dst_file)
-            shutil.move(src_file, dst_dir)
+    shutil.copytree(src, dst)
+
+    # for src_dir, dirs, files in os.walk(src):
+    #     dst_dir = src_dir.replace(src, dst, 1)
+    #     if not os.path.exists(dst_dir):
+    #         os.makedirs(dst_dir)
+    #     for file_ in files:
+    #         src_file = os.path.join(src_dir, file_)
+    #         dst_file = os.path.join(dst_dir, file_)
+    #         if os.path.exists(dst_file):
+    #             # in case of the src and dst are the same file
+    #             if os.path.samefile(src_file, dst_file):
+    #                 continue
+    #             os.remove(dst_file)
+    #         shutil.move(src_file, dst_dir)
 
 class Syncer:
     def __init__(self, vtolvr_dir, url, download_directory="vtolvrmissions_temp"):
@@ -268,6 +290,9 @@ class Syncer:
 
         if os.path.exists(download_file):
             output_folder = "vtolvrmissions.com_" + ".".join(download_file.split(".")[:-1]).split(os.sep)[-1]
+
+            #exists_or_make(output_folder)
+
             if resource['resource_type'] == "map":
                 zip_dir = os.path.join(self.maps_directory, output_folder)
             elif resource['resource_type'] == "mission":
@@ -278,7 +303,30 @@ class Syncer:
                 zip_dir = os.path.join(self.others_directory, output_folder)
 
             logger.info("Unzipping %s" % download_file)
-            Archive(download_file).extractall(zip_dir, auto_create_dir=True)
+
+
+            if zipfile.is_zipfile(download_file):
+                try:
+                    with zipfile.ZipFile(download_file, 'r') as zip_ref:
+                        zip_ref.extractall(winapi_path(zip_dir))
+                except Exception as zip_error:
+                    logger.error("Error extracting zip: %s" % zip_error)
+            else:
+                try:
+                    patoolib.extract_archive(download_file, outdir=zip_dir)
+                except Exception as extract_error:
+                    logger.error("Error extracting: %s" % extract_error)
+                    if "could not find an executable program to extract format 7z" in str(extract_error):
+                        raise RuntimeError("Missing 7z Executable! You must have 7z installed to extract resources compressed with 7z.")
+
+
+            # if hasattr(sys, '_MEIPASS'):
+            #     patool_path = os.path.join(sys._MEIPASS, "patool", "patool")
+            #     print(patool_path)
+            #
+            #     # Archive(download_file).extractall(zip_dir, auto_create_dir=True, patool_path=patool_path)
+            # else:
+            #     Archive(download_file).extractall(zip_dir, auto_create_dir=True)
             logger.info("Unzipped")
 
             resource_metadata = resource
@@ -451,6 +499,7 @@ class Syncer:
         self.get_local_maps()
         self.get_local_missions()
 
+
     @staticmethod
     def validate_local_metadata(metadata):
         if "title" in metadata and "local_version" in metadata and "local_location" in metadata and "metadata_version" in metadata:
@@ -521,6 +570,7 @@ class Syncer:
 
         except FileNotFoundError as err_msg:
             logger.error("Unable to find CustomMaps folder - bad steam directory? %s" % err_msg)
+            raise NotADirectoryError("Unable to find CustomMaps folder - bad steam directory? %s" % err_msg)
 
     def get_local_missions(self):
         logger.info("Looking for local VTOLVRMissions.com missions")
@@ -572,6 +622,7 @@ class Syncer:
                     logger.debug("Found unmanaged mission: %s" % each)
         except FileNotFoundError as err_msg:
             logger.error("Unable to find CustomScenarios folder - bad steam directory? %s" % err_msg)
+            raise NotADirectoryError("Unable to find CustomScenarios folder - bad steam directory? %s" % err_msg)
 
     def get_local_campaigns(self):
         logger.info("Looking for local VTOLVRMissions.com campaigns")
@@ -624,6 +675,7 @@ class Syncer:
                     logger.debug("Found unmanaged mission: %s" % each)
         except FileNotFoundError as err_msg:
             logger.error("Unable to find CustomScenarios folder - bad steam directory? %s" % err_msg)
+            raise NotADirectoryError("Unable to find CustomScenarios folder - bad steam directory? %s" % err_msg)
 
     @staticmethod
     def new_version_check(resource):

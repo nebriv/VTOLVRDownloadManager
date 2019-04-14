@@ -194,8 +194,8 @@ class Window(Frame):
         self.online_status_label = Label(self, textvariable=self.vtol_online_text)
         self.online_status_label.grid(row=4, column=3, sticky="SE")
 
-        t1 = threading.Thread(target=self.load_vtol_sync_app)
-        t1.start()
+        self.get_steam_dir()
+        self.load_vtol_sync_app()
 
         nb = ttk.Notebook(self)
         campaign_page = ttk.Frame(nb)
@@ -217,7 +217,7 @@ class Window(Frame):
         settings_page.grid_columnconfigure(2, weight=1)
         Checkbutton(settings_page, text="Show Unmanaged Resources", variable=self.show_unmanaged, command=self.refresh_all).grid(row=0, sticky=W, padx=5)
         Checkbutton(settings_page, text="Perform Connectivity Checks when offline", variable=self.run_connectivity_checks).grid(row=1, sticky=W, padx=5)
-        #Entry(settings_page, textvariable=self.steam_dir).grid(row=2, sticky=W, padx=5)
+        #Entry(settings_page, textvariable=self.steam_dir.get()).grid(row=2, sticky=W, padx=5)
 
         # Logger Page
         logger_page.grid_rowconfigure(3)
@@ -243,10 +243,6 @@ class Window(Frame):
         # log_save = Button(log_buttons, text="Save")
         # log_save.grid(row=1,column=2)
 
-
-        #Checkbutton(logger_page, text="Show Unmanaged Resources", variable=self.show_unmanaged, command=self.refresh_all).grid(row=0, sticky=W, padx=5)
-        #Checkbutton(logger_page, text="Perform Connectivity Checks when offline", variable=self.run_connectivity_checks).grid(row=1, sticky=W, padx=5)
-        #Entry(settings_page, textvariable=self.steam_dir).grid(row=2, sticky=W, padx=5)
 
         # Campaign Page
         campaign_page.grid_rowconfigure(10)
@@ -505,7 +501,6 @@ class Window(Frame):
         menu.add_command(label="Update All", command=self.update_all)
         menu.add_command(label="Refresh Tables", command=self.refresh_all)
         menu.add_command(label="About", command=self.make_about_window)
-        t1.join()
 
     def set_campaign_details(self, tree):
         t = threading.Thread(target=self.set_campaign_details_thread, args=(tree,))
@@ -602,16 +597,19 @@ class Window(Frame):
             thread.start()
         self.master.after(250,self.status_message_updater)
 
-    def load_vtol_sync_app(self):
+    def get_steam_dir(self):
         """ Loads the actual downloader component """
         try:
-            steam_dir = auto_discover_vtol_dir()
+            self.steam_dir.set(auto_discover_vtol_dir())
         except Exception as err:
             logger.error("%s" % err)
-            steam_dir = self.steam_directory_prompt()
+            self.steam_dir.set(self.steam_directory_prompt())
 
-
-        self.vtol_sync = Syncer(steam_dir, "https://www.vtolvrmissions.com/")
+    def load_vtol_sync_app(self):
+        if self.steam_dir:
+            self.vtol_sync = Syncer(self.steam_dir.get(), "https://www.vtolvrmissions.com/")
+        else:
+            raise ValueError("Steam directory not set")
 
     def put_msg(self, msg):
         self.status_queue.put(msg)
@@ -841,44 +839,52 @@ class Window(Frame):
 
     def populate_missions(self):
         """Populates the mission table"""
-        for mission in self.vtol_sync.all_missions():
-            if "managed" in mission:
-                if mission['managed']:
+        try:
+            for mission in self.vtol_sync.all_missions():
+                if "managed" in mission:
+                    if mission['managed']:
 
-                    values = (mission['downloads'], mission['rating'], mission['details']['category'], mission['author'], mission['cur_version'], mission['local_version'], mission['resource_id'])
+                        values = (mission['downloads'], mission['rating'], mission['details']['category'], mission['author'], mission['cur_version'], mission['local_version'], mission['resource_id'])
 
-                    if not treeview_search(self.mission_tree, values):
-                        self.mission_tree.insert("", "end", text="%s" % (mission['title']), values=values)
+                        if not treeview_search(self.mission_tree, values):
+                            self.mission_tree.insert("", "end", text="%s" % (mission['title']), values=values)
+                    else:
+                        if self.show_unmanaged.get():
+                            self.mission_tree.insert("", "end", text="%s" % (mission['vtol_id']), values=("Unmanaged", "Unmanaged", "Unmanaged" "Unmanaged", "Unmanaged", "Unmanaged", "Unmanaged"))
                 else:
-                    if self.show_unmanaged.get():
-                        self.mission_tree.insert("", "end", text="%s" % (mission['vtol_id']), values=("Unmanaged", "Unmanaged", "Unmanaged" "Unmanaged", "Unmanaged", "Unmanaged", "Unmanaged"))
-            else:
-                self.mission_tree.insert("", "end", text="%s" % (mission['title']), values=(mission['downloads'], mission['rating'], mission['details']['category'], mission['author'], mission['cur_version'], "Not Downloaded", mission['resource_id']))
+                    self.mission_tree.insert("", "end", text="%s" % (mission['title']), values=(mission['downloads'], mission['rating'], mission['details']['category'], mission['author'], mission['cur_version'], "Not Downloaded", mission['resource_id']))
+        except Exception as err:
+            self.error_and_exit("Error Populating Missions", err)
 
     def populate_campaigns(self):
         """Populates the campaign table"""
-        for campaign in self.vtol_sync.all_campaigns():
-            if "managed" in campaign:
-                if campaign['managed']:
-                    self.campaign_tree.insert("", "end", text="%s" % (campaign['title']), values=(campaign['downloads'], campaign['rating'], campaign['details']['category'], campaign['author'], campaign['cur_version'], campaign['local_version'], campaign['resource_id']))
+        try:
+            for campaign in self.vtol_sync.all_campaigns():
+                if "managed" in campaign:
+                    if campaign['managed']:
+                        self.campaign_tree.insert("", "end", text="%s" % (campaign['title']), values=(campaign['downloads'], campaign['rating'], campaign['details']['category'], campaign['author'], campaign['cur_version'], campaign['local_version'], campaign['resource_id']))
+                    else:
+                        if self.show_unmanaged.get():
+                            self.campaign_tree.insert("", "end", text="%s" % (campaign['vtol_id']), values=("Unmanaged", "Unmanaged", "Unmanaged", "Unmanaged", "Unmanaged", "Unmanaged"))
                 else:
-                    if self.show_unmanaged.get():
-                        self.campaign_tree.insert("", "end", text="%s" % (campaign['vtol_id']), values=("Unmanaged", "Unmanaged", "Unmanaged", "Unmanaged", "Unmanaged", "Unmanaged"))
-            else:
-                self.campaign_tree.insert("", "end", text="%s" % (campaign['title']), values=(campaign['downloads'], campaign['rating'], campaign['details']['category'], campaign['author'], campaign['cur_version'], "Not Downloaded", campaign['resource_id']))
+                    self.campaign_tree.insert("", "end", text="%s" % (campaign['title']), values=(campaign['downloads'], campaign['rating'], campaign['details']['category'], campaign['author'], campaign['cur_version'], "Not Downloaded", campaign['resource_id']))
+        except Exception as err:
+            self.error_and_exit("Error Populating Campaigns", err)
 
     def populate_maps(self):
         """Populates the map table"""
-        for map in self.vtol_sync.all_maps():
-            if "managed" in map:
-                if map['managed']:
-                    self.map_tree.insert("", "end", text="%s" % (map['title']), values=(int(map['downloads']), map['rating'], map['author'], map['cur_version'], map['local_version'], map['resource_id']))
+        try:
+            for map in self.vtol_sync.all_maps():
+                if "managed" in map:
+                    if map['managed']:
+                        self.map_tree.insert("", "end", text="%s" % (map['title']), values=(int(map['downloads']), map['rating'], map['author'], map['cur_version'], map['local_version'], map['resource_id']))
+                    else:
+                        if self.show_unmanaged.get():
+                            self.map_tree.insert("", "end", text="%s" % (map['vtol_id']), values=("Unmanaged", "Unmanaged", "Unmanaged", "Unmanaged", "Unmanaged", "Unmanaged"))
                 else:
-                    if self.show_unmanaged.get():
-                        self.map_tree.insert("", "end", text="%s" % (map['vtol_id']), values=("Unmanaged", "Unmanaged", "Unmanaged", "Unmanaged", "Unmanaged", "Unmanaged"))
-            else:
-                self.map_tree.insert("", "end", text="%s" % (map['title']), values=(int(map['downloads']), map['rating'], map['author'], map['cur_version'], "Not Downloaded", map['resource_id']))
-
+                    self.map_tree.insert("", "end", text="%s" % (map['title']), values=(int(map['downloads']), map['rating'], map['author'], map['cur_version'], "Not Downloaded", map['resource_id']))
+        except Exception as err:
+            self.error_and_exit("Error Populating Maps", err)
 
     def client_exit(self):
         try:
@@ -886,7 +892,9 @@ class Window(Frame):
                 self.vtol_sync.clean_up_temp_folders()
         except Exception as err:
             logger.error("Error cleaning up temp: %s" % err)
-        sys.exit(0)
+        os._exit(1)
+        #sys.exit(0)
+
 
 def main():
 
