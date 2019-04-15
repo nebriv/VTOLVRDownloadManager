@@ -194,7 +194,6 @@ class Window(Frame):
         self.online_status_label.grid(row=4, column=3, sticky="SE")
 
         self.get_steam_dir()
-        self.load_vtol_sync_app()
 
         nb = ttk.Notebook(self)
         campaign_page = ttk.Frame(nb)
@@ -501,6 +500,8 @@ class Window(Frame):
         menu.add_command(label="Refresh Tables", command=self.refresh_all)
         menu.add_command(label="About", command=self.make_about_window)
 
+        self.load_vtol_sync_app()
+
     def set_campaign_details(self, tree):
         t = threading.Thread(target=self.set_campaign_details_thread, args=(tree,))
         t.start()
@@ -695,19 +696,19 @@ class Window(Frame):
 
     def download_resource(self, resource):
         """ The actual function calling the download function. """
-        try:
-            self.vtol_sync.download_resource(resource)
-            if resource['resource_type'] == "map":
-                self.refresh_maps()
-            elif resource['resource_type'] == "campaign":
-                self.refresh_campaigns()
-            elif resource['resource_type'] == "mission":
-                self.refresh_missions()
-            else:
-                self.refresh_all()
-        except Exception as err:
-            self.put_msg("Error downloading resource: %s" % err)
-            self.display_error("Error downloading resource", err)
+        # try:
+        self.vtol_sync.download_resource(resource)
+        if resource['resource_type'] == "map":
+            self.refresh_maps()
+        elif resource['resource_type'] == "campaign":
+            self.refresh_campaigns()
+        elif resource['resource_type'] == "mission":
+            self.refresh_missions()
+        else:
+            self.refresh_all()
+        # except Exception as err:
+        #     self.put_msg("Error downloading resource: %s" % err)
+        #     self.display_error("Error downloading resource", err)
 
 
 

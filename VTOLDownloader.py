@@ -209,7 +209,7 @@ class Syncer:
     def parse_vtol_map_file(directory):
         for each in os.listdir(directory):
             if each.endswith(".vtm"):
-                with open(winapi_path(os.path.join(directory, each))) as map_file:
+                with open(os.path.join(directory, each)) as map_file:
                     lines = map_file.readlines()
                     if "VTMapCustom" in lines[0]:
                         for line in lines:
@@ -255,6 +255,7 @@ class Syncer:
             else:
                 update = True
 
+        logger.info("Downloading: %s" % resource['details']['download_link'])
         r = requests.get(resource['details']['download_link'], stream=True)
         d = r.headers['content-disposition']
         fname = re.findall("filename=(.+)", d)[0].strip("\"")
@@ -276,6 +277,7 @@ class Syncer:
         logger.info("Done downloading")
 
         if os.path.exists(download_file):
+            logger.debug("Downloaded to: %s" % download_file)
             output_folder = "vtolvrmissions.com_" + ".".join(download_file.split(".")[:-1]).split(os.sep)[-1]
 
             #exists_or_make(output_folder)
@@ -307,15 +309,7 @@ class Syncer:
                     if "could not find an executable program to extract format 7z" in str(extract_error):
                         raise RuntimeError("Missing 7z Executable! You must have 7z installed to extract resources compressed with 7z.")
 
-
-            # if hasattr(sys, '_MEIPASS'):
-            #     patool_path = os.path.join(sys._MEIPASS, "patool", "patool")
-            #     print(patool_path)
-            #
-            #     # Archive(download_file).extractall(zip_dir, auto_create_dir=True, patool_path=patool_path)
-            # else:
-            #     Archive(download_file).extractall(zip_dir, auto_create_dir=True)
-            logger.info("Unzipped")
+            logger.info("Unzipped %s" % download_file)
 
             resource_metadata = resource
             resource_metadata['download_date'] = datetime.datetime.now()
@@ -420,9 +414,6 @@ class Syncer:
                         "There is an error parsing the VTOL VR Mission files. No mission data found within download.")
 
     def get_resource_by_vtol_id(self, vtol_id, resource_type):
-        #print(self.maps)
-        #print(self.missions)
-        #print(self.campaigns)
         if resource_type == "map":
             for each_map in self.maps:
                 if "vtol_id" in each_map:
